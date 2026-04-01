@@ -22,22 +22,22 @@
     #dashboard { display:none; }
 </style>
 
-<!-- ChartJS -->
-https://cdn.jsdelivr.net/npm/chart.js
-https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns
+<!-- ✅ Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
 
-<!-- ✅ Supabase JS -->
-https://cdn.jsdelivr.net/npm/@supabase/supabase-js>
+<!-- ✅ Supabase -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 </head>
 <body>
 
 <h1>🌱 Courbe humidité + seuil + arrosages</h1>
 
-<!-- ✅ ✅ BLOC DE LOGIN AJOUTÉ -->
+<!-- ✅ ✅ BLOC DE LOGIN -->
 <div id="loginBox">
     <h2>Connexion</h2>
-    <p>Entrez votre email pour recevoir un lien ou un code de connexion :</p>
+    <p>Entrez votre email pour recevoir un lien ou un code :</p>
 
     <input id="emailInput" type="email" placeholder="votre.email@example.com" style="width:90%">
     <button onclick="login()">Se connecter</button>
@@ -45,7 +45,7 @@ https://cdn.jsdelivr.net/npm/@supabase/supabase-js>
     <p id="loginStatus" style="margin-top:10px;color:#444;"></p>
 </div>
 
-<!-- ✅ ✅ LE DASHBOARD N'APPARAÎT QUE SI L'UTILISATEUR EST CONNECTÉ -->
+<!-- ✅ ✅ LE DASHBOARD -->
 <div id="dashboard">
 
 <p><strong>Device ID :</strong></p>
@@ -73,7 +73,7 @@ https://cdn.jsdelivr.net/npm/@supabase/supabase-js>
     <canvas id="chart"></canvas>
 </div>
 
-</div> <!-- END dashboard -->
+</div> <!-- /dashboard -->
 
 <script>
 // --------------------------------------------------
@@ -85,7 +85,7 @@ const SUPABASE_KEY =
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// ✅ Au démarrage : vérifier si l'utilisateur est connecté
+// ✅ Afficher le dashboard si l'utilisateur est connecté
 supabaseClient.auth.onAuthStateChange((event, session) => {
     if (session) {
         document.getElementById("loginBox").style.display = "none";
@@ -94,7 +94,7 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
 });
 
 // --------------------------------------------------
-// ✅ LOGIN (email OTP ou Magic Link automatiquement envoyé)
+// ✅ LOGIN
 // --------------------------------------------------
 async function login() {
     const email = document.getElementById("emailInput").value.trim();
@@ -104,24 +104,24 @@ async function login() {
 
     text.textContent = "⏳ Envoi du lien/code...";
     
-    const { data, error } = await supabaseClient.auth.signInWithOtp({ email });
+    const { error } = await supabaseClient.auth.signInWithOtp({ email });
 
     if (error) {
         text.textContent = "❌ Erreur : " + error.message;
         return;
     }
 
-    text.textContent = "✅ Email envoyé ! Vérifiez votre boîte de réception.";
+    text.textContent = "✅ Email envoyé ! Vérifiez votre boîte.";
 }
 
 
-// --------------------------------------------------
-// ✅ TON CODE EXISTANT (inchangé)
-// --------------------------------------------------
+
+// ✅ ✅ TON CODE ORIGINAL COMMENCE ICI (inchangé)
 
 let chart = null;
 
 async function loadCurve() {
+
     const deviceId = document.getElementById("deviceIdInput").value.trim();
     const status   = document.getElementById("status");
     const container= document.getElementById("chartContainer");
@@ -253,18 +253,10 @@ function applyTimeScale() {
     let start;
 
     switch (scale) {
-        case "hour":
-            start = new Date(now.getTime() - 1 * 60 * 60 * 1000);
-            break;
-        case "day":
-            start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-            break;
-        case "week":
-            start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-            break;
-        case "month":
-            start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-            break;
+        case "hour":  start = new Date(now.getTime() - 1 * 60 * 60 * 1000); break;
+        case "day":   start = new Date(now.getTime() - 24 * 60 * 60 * 1000); break;
+        case "week":  start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); break;
+        case "month": start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); break;
     }
 
     chart.options.scales.x.min = start;
@@ -302,7 +294,7 @@ async function sendThreshold() {
     const threshold = parseFloat(document.getElementById("thresholdInput").value.trim());
     const status   = document.getElementById("status");
 
-    await fetch(`${SUPABASE_URL}/rest/v1/actions`, {
+    await fetch(`${SUPABASE_URL}/rest/v1.actions`, {
         method: "POST",
         headers: {
             "apikey": SUPABASE_KEY,
@@ -347,3 +339,4 @@ async function deleteEverything() {
 
 </body>
 </html>
+``
