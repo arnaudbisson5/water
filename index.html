@@ -10,15 +10,43 @@
     input, button, select { padding: 10px; font-size: 16px; margin-top: 10px; margin-right: 5px; }
     #chartContainer { width: 100%; max-width: 900px; margin-top: 40px; }
     #status { margin-top:20px;font-weight:bold; }
+
+    /* ✅ Zone login */
+    #loginBox {
+        border: 2px solid #ccc;
+        padding: 20px;
+        max-width: 400px;
+        border-radius: 10px;
+        margin-bottom: 30px;
+    }
+    #dashboard { display:none; }
 </style>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+<!-- ChartJS -->
+https://cdn.jsdelivr.net/npm/chart.js
+https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns
+
+<!-- ✅ Supabase JS -->
+https://cdn.jsdelivr.net/npm/@supabase/supabase-js>
 
 </head>
 <body>
 
 <h1>🌱 Courbe humidité + seuil + arrosages</h1>
+
+<!-- ✅ ✅ BLOC DE LOGIN AJOUTÉ -->
+<div id="loginBox">
+    <h2>Connexion</h2>
+    <p>Entrez votre email pour recevoir un lien ou un code de connexion :</p>
+
+    <input id="emailInput" type="email" placeholder="votre.email@example.com" style="width:90%">
+    <button onclick="login()">Se connecter</button>
+
+    <p id="loginStatus" style="margin-top:10px;color:#444;"></p>
+</div>
+
+<!-- ✅ ✅ LE DASHBOARD N'APPARAÎT QUE SI L'UTILISATEUR EST CONNECTÉ -->
+<div id="dashboard">
 
 <p><strong>Device ID :</strong></p>
 <input id="deviceIdInput" value="B483A21F8A3C" size="20">
@@ -45,21 +73,55 @@
     <canvas id="chart"></canvas>
 </div>
 
+</div> <!-- END dashboard -->
+
 <script>
 // --------------------------------------------------
-// CONFIG
+// ✅ CONFIG SUPABASE
 // --------------------------------------------------
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
 const SUPABASE_KEY =
 "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
 
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ✅ Au démarrage : vérifier si l'utilisateur est connecté
+supabaseClient.auth.onAuthStateChange((event, session) => {
+    if (session) {
+        document.getElementById("loginBox").style.display = "none";
+        document.getElementById("dashboard").style.display = "block";
+    }
+});
+
+// --------------------------------------------------
+// ✅ LOGIN (email OTP ou Magic Link automatiquement envoyé)
+// --------------------------------------------------
+async function login() {
+    const email = document.getElementById("emailInput").value.trim();
+    const text = document.getElementById("loginStatus");
+
+    if (!email) { text.textContent = "Veuillez entrer un email."; return; }
+
+    text.textContent = "⏳ Envoi du lien/code...";
+    
+    const { data, error } = await supabaseClient.auth.signInWithOtp({ email });
+
+    if (error) {
+        text.textContent = "❌ Erreur : " + error.message;
+        return;
+    }
+
+    text.textContent = "✅ Email envoyé ! Vérifiez votre boîte de réception.";
+}
+
+
+// --------------------------------------------------
+// ✅ TON CODE EXISTANT (inchangé)
+// --------------------------------------------------
+
 let chart = null;
 
-// --------------------------------------------------
-// ✅ CHARGER LA COURBE
-// --------------------------------------------------
 async function loadCurve() {
-
     const deviceId = document.getElementById("deviceIdInput").value.trim();
     const status   = document.getElementById("status");
     const container= document.getElementById("chartContainer");
@@ -180,13 +242,9 @@ async function loadCurve() {
         }
     });
 
-    // ✅ Applique l’échelle de temps automatiquement après affichage
     applyTimeScale();
 }
 
-// --------------------------------------------------
-// ✅ CHANGEMENT D’ÉCHELLE DE TEMPS
-// --------------------------------------------------
 function applyTimeScale() {
     if (!chart) return;
 
@@ -214,9 +272,6 @@ function applyTimeScale() {
     chart.update();
 }
 
-// --------------------------------------------------
-// ✅ ENVOYER COMMANDE D’ARROSAGE
-// --------------------------------------------------
 async function sendWaterCommand() {
     const deviceId = document.getElementById("deviceIdInput").value.trim();
     const status   = document.getElementById("status");
@@ -242,9 +297,6 @@ async function sendWaterCommand() {
     loadCurve();
 }
 
-// --------------------------------------------------
-// ✅ ENVOYER SEUIL
-// --------------------------------------------------
 async function sendThreshold() {
     const deviceId = document.getElementById("deviceIdInput").value.trim();
     const threshold = parseFloat(document.getElementById("thresholdInput").value.trim());
@@ -272,9 +324,6 @@ async function sendThreshold() {
     loadCurve();
 }
 
-// --------------------------------------------------
-// ✅ SUPPRESSION DES DONNÉES
-// --------------------------------------------------
 async function deleteEverything() {
     const deviceId = document.getElementById("deviceIdInput").value.trim();
     const status   = document.getElementById("status");
@@ -294,7 +343,7 @@ async function deleteEverything() {
     status.textContent = "✅ Toutes les données ont été supprimées.";
     loadCurve();
 }
-
 </script>
+
 </body>
 </html>
