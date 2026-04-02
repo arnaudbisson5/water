@@ -98,7 +98,58 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let chart = null;
+// ----------------------------------------------------------------
+// CRÉATION D'UN MODULE (devices)
+// ----------------------------------------------------------------
+async function createDevice() {
+  const status = document.getElementById("deviceStatus");
+  status.textContent = "";
 
+  // 1. Récupérer l'utilisateur connecté
+  const { data, error } = await supabaseClient.auth.getUser();
+
+  if (error || !data || !data.user) {
+    status.textContent = "Utilisateur non connecté.";
+    return;
+  }
+
+  const userId = data.user.id;
+
+  // 2. Lire les champs du formulaire
+  const deviceUid =
+    document.getElementById("deviceUidInput").value.trim();
+  const deviceName =
+    document.getElementById("deviceNameInput").value.trim();
+
+  if (!deviceUid || !deviceName) {
+    status.textContent =
+      "Veuillez renseigner l'identifiant et le nom du module.";
+    return;
+  }
+
+  // 3. Insertion dans la table devices
+  const { error: insertError } = await supabaseClient
+    .from("devices")
+    .insert({
+      user_id: userId,
+      device_uid: deviceUid,
+      name: deviceName
+    });
+
+  if (insertError) {
+    status.textContent = "Erreur : " + insertError.message;
+    return;
+  }
+
+  status.textContent = "Module créé avec succès.";
+
+  // Optionnel : vider les champs
+  document.getElementById("deviceUidInput").value = "";
+  document.getElementById("deviceNameInput").value = "";
+}
+
+
+  
 // ----------------------------------------------------------------
 // ✅ VÉRITÉ SERVEUR : UTILISATEUR EXISTE ?
 // ----------------------------------------------------------------
