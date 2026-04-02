@@ -63,3 +63,149 @@
   <button onclick="sendWaterCommand()">💧 Arroser maintenant</button>
   <button onclick="logout()">🚪 Déconnexion</button>
 
+  <div id="status"></div>
+
+  <div id="chartContainer">
+    <canvas id="chart"></canvas>
+  </div>
+</div>
+
+<script>
+// ----------------------------------------------------------------
+// CONFIG SUPABASE
+// ----------------------------------------------------------------
+const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
+const SUPABASE_KEY = "TA_CLE_ANON_ICI"; // garde la tienne
+
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let chart = null;
+
+// ----------------------------------------------------------------
+// ✅ VÉRITÉ SERVEUR : UTILISATEUR EXISTE ?
+// ----------------------------------------------------------------
+async function updateUI() {
+  const { data, error } = await supabaseClient.auth.getUser();
+
+  // ✅ utilisateur supprimé / inexistant
+  if (error || !data || !data.user) {
+    await supabaseClient.auth.signOut();
+
+    document.getElementById("loginBox").style.display = "block";
+    document.getElementById("dashboard").style.display = "none";
+    return;
+  }
+
+  // ✅ utilisateur valide
+  document.getElementById("loginBox").style.display = "none";
+  document.getElementById("dashboard").style.display = "block";
+}
+
+// ✅ au chargement
+updateUI();
+
+// ✅ changement d’état auth (login, logout, magic link)
+supabaseClient.auth.onAuthStateChange(() => updateUI());
+
+// ----------------------------------------------------------------
+// LOGIN MAGIC LINK
+// ----------------------------------------------------------------
+async function login() {
+  const email = document.getElementById("emailInput").value.trim();
+  const status = document.getElementById("loginStatus");
+
+  if (!email) {
+    status.textContent = "Veuillez entrer un email.";
+    return;
+  }
+
+  status.textContent = "⏳ Envoi du lien magique...";
+
+  const { error } = await supabaseClient.auth.signInWithOtp({ email });
+
+  status.textContent = error
+    ? "❌ " + error.message
+    : "✅ Lien envoyé. Vérifiez vos emails.";
+}
+
+// ----------------------------------------------------------------
+// LOGOUT
+// ----------------------------------------------------------------
+async function logout() {
+  await supabaseClient.auth.signOut();
+  updateUI();
+}
+
+// ----------------------------------------------------------------
+// COURBE
+// ----------------------------------------------------------------
+async function loadCurve() {
+  const deviceId = deviceIdInput.value.trim();
+  status.textContent = "⏳ Chargement...";
+
+  const mesures = await fetch(
+    `${SUPABASE_URL}/rest/v1/mesures?device_id=eq.${deviceId}&order=timestamp.asc`,
+    { headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY } }
+  ).then(r => r.json());
+
+  if (!mesures.length) {
+    status.textContent = "Aucune mesure.";
+    return;
+  }
+
+  const points = mesures.map(m => ({
+    x: new Date(m.timestamp),
+    y: m.humidity
+  }));
+
+  if (chart) chart.destroy();
+
+  chart = new Chart(document.getElementById("chart"), {
+    type: "line",
+    data: {
+      datasets: [
+        {
+          label: "Humidité (%)",
+          data: points,
+          borderColor: "#2c7",
+          tension: 0.2
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        x: { type: "time" },
+        y: { min: 0, max: 100 }
+      }
+    }
+  });
+
+  status.textContent = "✅ Courbe prête";
+}
+
+// ----------------------------------------------------------------
+// ACTIONS
+// ----------------------------------------------------------------
+async function sendWaterCommand() {
+  await fetch(`${SUPABASE_URL}/rest/v1/actions`, {
+    method: "POST",
+    headers: {
+      "apikey": SUPABASE_KEY,
+      "Authorization": "Bearer " + SUPABASE_KEY,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      device_id: deviceIdInput.value,
+      action: "water",
+      processed: false,
+      timestamp: new Date().toISOString()
+    })
+  });
+
+  loadCurve();
+}
+</script>
+
+</body>
+</html>
