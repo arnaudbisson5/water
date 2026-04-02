@@ -177,7 +177,7 @@ async function createDevice() {
    COURBE
 ============================================================ */
 async function loadCurve() {
-  const deviceId = deviceSelect.value;
+  const deviceId = document.getElementById("deviceSelect").value;
   status.textContent = "Chargement...";
 
   const mesures = await fetch(
