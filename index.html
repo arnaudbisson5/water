@@ -1,3 +1,5 @@
+<!"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo">
+
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -27,11 +29,11 @@
   </style>
 
   <!-- Chart.js -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+  https://cdn.jsdelivr.net/npm/chart.js
+  https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns
 
   <!-- Supabase -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2
 </head>
 <body>
 
@@ -76,7 +78,6 @@
   <div style="max-width: 900px; margin-top: 20px;">
     <canvas id="chart"></canvas>
   </div>
-
 </div>
 
 <script>
@@ -84,13 +85,13 @@
    CONFIG SUPABASE
 ============================================================ */
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo"; // <-- remets ta clé anon ici
+const SUPABASE_KEY = "TA_CLE_ANON_ICI";
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let chart = null;
 
 /* ============================================================
-   AUTH UI
+   AUTH UI (✅ UNIQUEMENT AUTH)
 ============================================================ */
 async function updateUI() {
   const { data } = await supabaseClient.auth.getUser();
@@ -101,11 +102,13 @@ async function updateUI() {
   } else {
     loginBox.style.display = "none";
     dashboard.style.display = "block";
-    loadUserDevices();
+
+    await loadUserDevices();   // charge les modules
+    loadCurve();               // affiche la courbe du module actif
   }
 }
+
 supabaseClient.auth.onAuthStateChange(updateUI);
-updateUI();
 
 /* ============================================================
    LOGIN
@@ -131,7 +134,7 @@ async function logout() {
 }
 
 /* ============================================================
-   DEVICES
+   MODULES
 ============================================================ */
 async function loadUserDevices() {
   const { data: devices, error } = await supabaseClient
@@ -145,6 +148,7 @@ async function loadUserDevices() {
   }
 
   deviceSelect.innerHTML = "";
+
   devices.forEach(d => {
     const opt = document.createElement("option");
     opt.value = d.device_uid;
@@ -152,6 +156,11 @@ async function loadUserDevices() {
     deviceSelect.appendChild(opt);
   });
 }
+
+/* ✅ Mise à jour automatique quand on change de module */
+deviceSelect.addEventListener("change", () => {
+  loadCurve();
+});
 
 async function createDevice() {
   const uid = deviceUidInput.value.trim();
@@ -172,15 +181,21 @@ async function createDevice() {
 
   deviceUidInput.value = "";
   deviceNameInput.value = "";
-  loadUserDevices();
+  await loadUserDevices();
+  loadCurve();
 }
 
 /* ============================================================
-   COURBE (✅ CORRIGÉ)
+   COURBE
 ============================================================ */
 async function loadCurve() {
   const deviceId = deviceSelect.value;
   status.textContent = "⏳ Chargement...";
+
+  if (!deviceId) {
+    status.textContent = "Aucun module sélectionné.";
+    return;
+  }
 
   const mesures = await fetch(
     `${SUPABASE_URL}/rest/v1/mesures?device_id=eq.${deviceId}&order=timestamp.asc`,
@@ -193,7 +208,10 @@ async function loadCurve() {
   ).then(r => r.json());
 
   if (!mesures.length) {
-    status.textContent = "Aucune mesure.";
+    status.textContent =
+      "⚠️ Aucune donnée pour ce module.\n" +
+      "Vérifiez qu’un ESP envoie bien des mesures.";
+    if (chart) chart.destroy();
     return;
   }
 
@@ -203,7 +221,8 @@ async function loadCurve() {
   }));
 
   if (chart) chart.destroy();
-  chart = new Chart(document.getElementById("chart"), {
+
+  chart = new Chart(chartCanvas, {
     type: "line",
     data: {
       datasets: [{
@@ -230,6 +249,7 @@ async function loadCurve() {
 ============================================================ */
 async function sendWaterCommand() {
   const deviceId = deviceSelect.value;
+  if (!deviceId) return;
 
   await fetch(`${SUPABASE_URL}/rest/v1/actions`, {
     method: "POST",
