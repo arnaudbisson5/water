@@ -1,4 +1,224 @@
 <!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Jardin en Eau</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 30px;
+    }
+
+    h1, h2 {
+      color: #2c7;
+    }
+
+    input, button, select {
+      padding: 8px;
+      font-size: 15px;
+      margin: 5px 0;
+    }
+
+    #loginBox, #deviceBox {
+      border: 1px solid #ccc;
+      padding: 15px;
+      border-radius: 6px;
+      max-width: 400px;
+      margin-bottom: 20px;
+    }
+
+    #dashboard {
+      display: none;
+    }
+
+    .row {
+      margin-bottom: 10px;
+    }
+
+    .status {
+      font-weight: bold;
+      margin-top: 10px;
+    }
+  </style>
+
+  <!-- Supabase JS -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<h1>🌱 Jardin en Eau</h1>
+
+<!-- ================= LOGIN ================= -->
+
+<div id="loginBox">
+  <h2>Connexion</h2>
+  <p>Email :</p>
+  <input id="emailInput" type="email" placeholder="email@example.com">
+  <br>
+  <button onclick="login()">Recevoir le lien de connexion</button>
+  <p id="loginStatus" class="status"></p>
+</div>
+
+<!-- ================= DASHBOARD ================= -->
+
+<div id="dashboard">
+
+  <!-- ===== MODULE SELECTION ===== -->
+  <div id="deviceBox">
+    <h2>Modules</h2>
+
+    <label for="deviceSelect"><strong>Module actif :</strong></label><br>
+    <select id="deviceSelect"></select>
+
+    <div class="row">
+      <h3>Ajouter un module</h3>
+      <input id="deviceUidInput" placeholder="Device UID (ESP)">
+      <input id="deviceNameInput" placeholder="Nom du module">
+      <br>
+      <button onclick="createDevice()">Créer le module</button>
+      <p id="deviceStatus" class="status"></p>
+    </div>
+  </div>
+
+  <!-- ===== ACTIONS ===== -->
+  <div>
+    <h2>Actions</h2>
+    <button onclick="loadDummy()">Afficher les données (exemple)</button>
+    <p id="dataStatus" class="status"></p>
+  </div>
+
+</div>
+
+<script>
+/* ============================================================
+   CONFIG SUPABASE
+============================================================ */
+const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
+const SUPABASE_ANON_KEY = "TA_CLE_ANON_ICI";
+
+const supabaseClient = supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY
+);
+
+/* ============================================================
+   AUTH & UI MANAGEMENT
+============================================================ */
+async function updateUI() {
+  const { data } = await supabaseClient.auth.getUser();
+
+  if (!data || !data.user) {
+    document.getElementById("loginBox").style.display = "block";
+    document.getElementById("dashboard").style.display = "none";
+  } else {
+    document.getElementById("loginBox").style.display = "none";
+    document.getElementById("dashboard").style.display = "block";
+    loadUserDevices();
+  }
+}
+
+supabaseClient.auth.onAuthStateChange(() => updateUI());
+updateUI();
+
+/* ============================================================
+   LOGIN
+============================================================ */
+async function login() {
+  const email = document.getElementById("emailInput").value.trim();
+  const status = document.getElementById("loginStatus");
+
+  if (!email) {
+    status.textContent = "Veuillez entrer un email.";
+    return;
+  }
+
+  status.textContent = "Envoi du lien...";
+  const { error } = await supabaseClient.auth.signInWithOtp({ email });
+
+  status.textContent = error
+    ? "Erreur : " + error.message
+    : "Lien envoyé, vérifiez votre boîte mail.";
+}
+
+/* ============================================================
+   DEVICES
+============================================================ */
+async function loadUserDevices() {
+  const { data: userData } = await supabaseClient.auth.getUser();
+  if (!userData?.user) return;
+
+  const { data: devices, error } = await supabaseClient
+    .from("devices")
+    .select("device_uid, name")
+    .order("created_at");
+
+  if (error) {
+    console.error(error);
+    return;
+  }
+
+  const select = document.getElementById("deviceSelect");
+  select.innerHTML = "";
+
+  devices.forEach(device => {
+    const option = document.createElement("option");
+    option.value = device.device_uid;
+    option.textContent = device.name || device.device_uid;
+    select.appendChild(option);
+  });
+}
+
+/* ============================================================
+   CREATE DEVICE
+============================================================ */
+async function createDevice() {
+  const status = document.getElementById("deviceStatus");
+  status.textContent = "";
+
+  const uid = document.getElementById("deviceUidInput").value.trim();
+  const name = document.getElementById("deviceNameInput").value.trim();
+
+  if (!uid || !name) {
+    status.textContent = "UID et nom requis.";
+    return;
+  }
+
+  const { data: userData } = await supabaseClient.auth.getUser();
+  const userId = userData.user.id;
+
+  const { error } = await supabaseClient
+    .from("devices")
+    .insert({
+      user_id: userId,
+      device_uid: uid,
+      name: name
+    });
+
+  if (error) {
+    status.textContent = "Erreur : " + error.message;
+    return;
+  }
+
+  status.textContent = "Module créé ✅";
+  document.getElementById("deviceUidInput").value = "";
+  document.getElementById("deviceNameInput").value = "";
+  loadUserDevices();
+}
+
+/* ============================================================
+   EXAMPLE DATA ACTION
+============================================================ */
+function loadDummy() {
+  const deviceId = document.getElementById("deviceSelect").value;
+  document.getElementById("dataStatus").textContent =
+    "Chargement des données pour le module : " + deviceId;
+}
+</script>
+
+</body>
+</html>
+<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8" />
