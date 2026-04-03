@@ -1,19 +1,19 @@
-<!"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo">
-
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Jardin en Eau</title>
 
   <style>
     body { font-family: Arial, sans-serif; margin: 30px; }
     h1, h2 { color: #2c7; }
+
     input, button, select {
       padding: 8px;
       font-size: 15px;
       margin: 6px 0;
     }
+
     #loginBox, #deviceBox {
       border: 1px solid #ccc;
       padding: 15px;
@@ -21,6 +21,7 @@
       max-width: 420px;
       margin-bottom: 20px;
     }
+
     #dashboard { display: none; }
     .status { font-weight: bold; margin-top: 10px; }
   </style>
@@ -32,6 +33,7 @@
   <!-- ✅ Supabase -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
+
 <body>
 
 <h1>🌱 Jardin en Eau</h1>
@@ -40,8 +42,8 @@
 <div id="loginBox">
   <h2>Connexion</h2>
   <p>Entrez votre email pour recevoir un lien magique :</p>
-  <input id="emailInput" type="email" placeholder="email@example.com">
-  <br>
+  <input id="emailInput" type="email" placeholder="email@example.com" />
+  <br />
   <button onclick="login()">Recevoir le lien de connexion</button>
   <p id="loginStatus" class="status"></p>
 </div>
@@ -49,22 +51,20 @@
 <!-- ================= DASHBOARD ================= -->
 <div id="dashboard">
 
-  <!-- ===== MODULES ===== -->
   <div id="deviceBox">
     <h2>Modules</h2>
 
-    <label for="deviceSelect"><strong>Module actif :</strong></label><br>
+    <label><strong>Module actif :</strong></label><br />
     <select id="deviceSelect"></select>
 
     <h3>Ajouter un module</h3>
-    <input id="deviceUidInput" placeholder="Device UID (ESP)">
-    <input id="deviceNameInput" placeholder="Nom du module">
-    <br>
+    <input id="deviceUidInput" placeholder="Device UID (ESP)" />
+    <input id="deviceNameInput" placeholder="Nom du module" />
+    <br />
     <button onclick="createDevice()">Créer le module</button>
     <p id="deviceStatus" class="status"></p>
   </div>
 
-  <!-- ===== COURBE ===== -->
   <h2>Courbe humidité</h2>
   <button onclick="loadCurve()">Afficher la courbe</button>
   <button onclick="sendWaterCommand()">💧 Arroser maintenant</button>
@@ -78,18 +78,18 @@
 </div>
 
 <script>
-/* ============================================================
-   CONFIG SUPABASE
-============================================================ */
+/* ================= TEST CHARGEMENT ================= */
+console.log("Supabase :", typeof supabase);
+console.log("Chart :", typeof Chart);
+
+/* ================= CONFIG SUPABASE ================= */
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
-const SUPABASE_KEY = "TA_CLE_ANON_ICI";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let chart = null;
 
-/* ============================================================
-   AUTH UI (✅ UNIQUEMENT AUTH)
-============================================================ */
+/* ================= AUTH UI ================= */
 async function updateUI() {
   const { data } = await supabaseClient.auth.getUser();
 
@@ -99,17 +99,15 @@ async function updateUI() {
   } else {
     loginBox.style.display = "none";
     dashboard.style.display = "block";
-
-    await loadUserDevices();   // charge les modules
-    loadCurve();               // affiche la courbe du module actif
+    await loadUserDevices();
+    loadCurve();
   }
 }
 
 supabaseClient.auth.onAuthStateChange(updateUI);
+updateUI();
 
-/* ============================================================
-   LOGIN
-============================================================ */
+/* ================= LOGIN ================= */
 async function login() {
   const email = emailInput.value.trim();
   if (!email) return;
@@ -118,43 +116,32 @@ async function login() {
 
   try {
     const { error } = await supabaseClient.auth.signInWithOtp({ email });
-
-    if (error) {
-      loginStatus.textContent = "Erreur : " + error.message;
-    } else {
-      loginStatus.textContent = "✅ Lien envoyé, vérifiez vos emails.";
-    }
-  } catch (err) {
-    console.error(err);
-    loginStatus.textContent = "❌ Erreur technique (voir console)";
+    loginStatus.textContent = error
+      ? "❌ " + error.message
+      : "✅ Lien envoyé ! Vérifie tes emails.";
+  } catch (e) {
+    console.error(e);
+    loginStatus.textContent = "❌ Erreur technique (console)";
   }
 }
 
-/* ============================================================
-   LOGOUT
-============================================================ */
+/* ================= LOGOUT ================= */
 async function logout() {
   await supabaseClient.auth.signOut();
   location.reload();
 }
 
-/* ============================================================
-   MODULES
-============================================================ */
+/* ================= MODULES ================= */
 async function loadUserDevices() {
-  const { data: devices, error } = await supabaseClient
+  const { data, error } = await supabaseClient
     .from("devices")
     .select("device_uid, name")
     .order("created_at");
 
-  if (error) {
-    console.error(error);
-    return;
-  }
+  if (error) return console.error(error);
 
   deviceSelect.innerHTML = "";
-
-  devices.forEach(d => {
+  data.forEach(d => {
     const opt = document.createElement("option");
     opt.value = d.device_uid;
     opt.textContent = d.name || d.device_uid;
@@ -162,47 +149,38 @@ async function loadUserDevices() {
   });
 }
 
-/* ✅ Mise à jour automatique quand on change de module */
-deviceSelect.addEventListener("change", () => {
-  loadCurve();
-});
+deviceSelect.addEventListener("change", loadCurve);
 
 async function createDevice() {
   const uid = deviceUidInput.value.trim();
   const name = deviceNameInput.value.trim();
   if (!uid || !name) return;
 
-  const { data } = await supabaseClient.auth.getUser();
+  const { data: user } = await supabaseClient.auth.getUser();
 
   const { error } = await supabaseClient.from("devices").insert({
-    user_id: data.user.id,
+    user_id: user.user.id,
     device_uid: uid,
     name: name
   });
 
   deviceStatus.textContent = error
-    ? "Erreur : " + error.message
-    : "Module créé ✅";
+    ? "❌ " + error.message
+    : "✅ Module créé";
 
   deviceUidInput.value = "";
   deviceNameInput.value = "";
-  await loadUserDevices();
-  loadCurve();
+  loadUserDevices();
 }
 
-/* ============================================================
-   COURBE
-============================================================ */
+/* ================= COURBE ================= */
 async function loadCurve() {
   const deviceId = deviceSelect.value;
-  status.textContent = "⏳ Chargement...";
+  if (!deviceId) return;
 
-  if (!deviceId) {
-    status.textContent = "Aucun module sélectionné.";
-    return;
-  }
+  status.textContent = "Chargement...";
 
-  const mesures = await fetch(
+  const res = await fetch(
     `${SUPABASE_URL}/rest/v1/mesures?device_id=eq.${deviceId}&order=timestamp.asc`,
     {
       headers: {
@@ -210,24 +188,23 @@ async function loadCurve() {
         Authorization: "Bearer " + SUPABASE_KEY
       }
     }
-  ).then(r => r.json());
+  );
 
-  if (!mesures.length) {
-    status.textContent =
-      "⚠️ Aucune donnée pour ce module.\n" +
-      "Vérifiez qu’un ESP envoie bien des mesures.";
+  const data = await res.json();
+  if (!data.length) {
+    status.textContent = "Aucune donnée pour ce module.";
     if (chart) chart.destroy();
     return;
   }
 
-  const points = mesures.map(m => ({
+  const points = data.map(m => ({
     x: new Date(m.timestamp),
     y: m.humidity
   }));
 
   if (chart) chart.destroy();
 
-  chart = new Chart(chartCanvas, {
+  chart = new Chart(document.getElementById("chart"), {
     type: "line",
     data: {
       datasets: [{
@@ -249,9 +226,7 @@ async function loadCurve() {
   status.textContent = "✅ Courbe affichée";
 }
 
-/* ============================================================
-   ACTION ARROSAGE
-============================================================ */
+/* ================= ACTION ARROSAGE ================= */
 async function sendWaterCommand() {
   const deviceId = deviceSelect.value;
   if (!deviceId) return;
