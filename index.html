@@ -3,7 +3,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8" />
-<title>Jardin en Eau</title>
+<title>Jardin en Eau ed05</title>
 
 <style>
   body { font-family: Arial; margin: 30px; }
@@ -75,11 +75,31 @@ let chart = null;
 // AUTH
 // --------------------------------------------------
 async function login() {
-  const email = document.getElementById("emailInput").value.trim();
-  if (!email) return;
+  try {
+    const email = document.getElementById("emailInput").value.trim();
+    if (!email) {
+      alert("Veuillez entrer un email");
+      return;
+    }
 
-  await supabase.auth.signInWithOtp({ email });
-  alert("Lien envoyé par email");
+    console.log("Tentative magic link pour :", email);
+
+    const { data, error } = await supabase.auth.signInWithOtp({
+      email: email
+    });
+
+    if (error) {
+      console.error(error);
+      alert("Erreur Supabase : " + error.message);
+      return;
+    }
+
+    alert("✅ Email envoyé. Vérifie ta boîte mail.");
+
+  } catch (e) {
+    console.error("Erreur JS :", e);
+    alert("Erreur JS – voir console");
+  }
 }
 
 async function logout() {
