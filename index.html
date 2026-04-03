@@ -55,27 +55,20 @@
     <select id="deviceSelect"></select>
   </div>
 
-  <label><strong>Période :</strong></label><br>
-  <select id="periodSelect">
-    <option value="1h">Dernière heure</option>
-    <option value="1d" selected>Dernier jour</option>
-    <option value="7d">Dernière semaine</option>
-    <option value="30d">Dernier mois</option>
-  </select>
-
-  <br><br>
-  <button onclick="loadCurve()">Afficher la courbe</button>
+  <button onclick="loadCurve()">Afficher la courbe (7 jours)</button>
   <button onclick="logout()">Déconnexion</button>
 
   <div id="status" class="status"></div>
 
-  <div style="max-width:900px; margin-top:20px;">
+  <div style="max-width: 900px; margin-top: 20px;">
     <canvas id="chart"></canvas>
   </div>
 </div>
 
 <script>
-/* ================= SUPABASE ================= */
+/* ============================================================
+   SUPABASE
+============================================================ */
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
 
@@ -86,7 +79,9 @@ const supabaseClient = supabase.createClient(
 
 let chart = null;
 
-/* ================= AUTH ================= */
+/* ============================================================
+   AUTH UI
+============================================================ */
 async function updateUI() {
   const { data } = await supabaseClient.auth.getUser();
   const logged = !!data?.user;
@@ -103,12 +98,17 @@ async function updateUI() {
 supabaseClient.auth.onAuthStateChange(updateUI);
 updateUI();
 
+/* ============================================================
+   LOGIN / LOGOUT
+============================================================ */
 async function login() {
   const email = emailInput.value.trim();
   if (!email) return;
 
-  loginStatus.textContent = "Envoi du lien...";
-  const { error } = await supabaseClient.auth.signInWithOtp({ email });
+  loginStatus.textContent = "Envoi du lien…";
+
+  const { error } =
+    await supabaseClient.auth.signInWithOtp({ email });
 
   loginStatus.textContent = error
     ? "❌ " + error.message
@@ -120,15 +120,23 @@ async function logout() {
   location.reload();
 }
 
-/* ================= MODULES ================= */
+/* ============================================================
+   MODULES
+============================================================ */
 async function loadUserDevices() {
-  const { data } = await supabaseClient
+  const { data, error } = await supabaseClient
     .from("devices")
     .select("device_uid, name")
     .order("created_at");
 
+  if (error) {
+    console.error(error);
+    return;
+  }
+
   deviceSelect.innerHTML = "";
-  data?.forEach(d => {
+
+  data.forEach(d => {
     const opt = document.createElement("option");
     opt.value = d.device_uid;
     opt.textContent = d.name || d.device_uid;
@@ -137,32 +145,24 @@ async function loadUserDevices() {
 }
 
 deviceSelect.addEventListener("change", loadCurve);
-periodSelect.addEventListener("change", loadCurve);
 
-/* ================= PÉRIODE ================= */
-function getStartDate(period) {
-  const now = Date.now();
-  const map = {
-    "1h": 60 * 60 * 1000,
-    "1d": 24 * 60 * 60 * 1000,
-    "7d": 7 * 24 * 60 * 60 * 1000,
-    "30d": 30 * 24 * 60 * 60 * 1000
-  };
-  return new Date(now - map[period]);
-}
-
-/* ================= COURBE ================= */
+/* ============================================================
+   COURBE – DERNIÈRE SEMAINE UNIQUEMENT
+============================================================ */
 async function loadCurve() {
-  const deviceId = deviceSelect.value;
-  if (!deviceId) return;
+  const deviceUid = deviceSelect.value;
+  if (!deviceUid) return;
 
-  const start = getStartDate(periodSelect.value);
-  status.textContent = "Chargement...";
+  status.textContent = "Chargement…";
+
+  const oneWeekAgo = new Date(
+    Date.now() - 7 * 24 * 60 * 60 * 1000
+  ).toISOString();
 
   const url =
     `${SUPABASE_URL}/rest/v1/mesures` +
-    `?device_uid=eq.${deviceId}` +
-    `&timestamp=gte.${start.toISOString()}` +
+    `?device_uid=eq.${deviceUid}` +
+    `&timestamp=gte.${oneWeekAgo}` +
     `&order=timestamp.asc`;
 
   const res = await fetch(url, {
@@ -173,6 +173,7 @@ async function loadCurve() {
   });
 
   const mesures = await res.json();
+  console.log("Mesures:", mesures);
 
   const points = mesures.map(m => ({
     x: new Date(m.timestamp),
@@ -181,35 +182,37 @@ async function loadCurve() {
 
   if (chart) chart.destroy();
 
-  chart = new Chart(document.getElementById("chart"), {
-    type: "line",
-    data: {
-      datasets: [{
-        label: "Humidité (%)",
-        data: points,
-        borderColor: "#2c7",
-        tension: 0.2
-      }]
-    },
-    options: {
-      responsive: true,
-      scales: {
-        x: {
-          type: "time",
-          time: {
-            tooltipFormat: "dd/MM HH:mm"
+  chart = new Chart(
+    document.getElementById("chart"),
+    {
+      type: "line",
+      data: {
+        datasets: [{
+          label: "Humidité (%) — 7 jours",
+          data: points,
+          borderColor: "#2c7",
+          tension: 0.2
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          x: {
+            type: "time"
+          },
+          y: {
+            min: 0,
+            max: 100
           }
-        },
-        y: {
-          min: 0,
-          max: 100
         }
       }
     }
-  });
+  );
 
   status.textContent =
-    points.length ? "✅ Courbe affichée" : "⚠️ Aucune donnée";
+    points.length
+      ? "✅ Courbe affichée"
+      : "⚠️ Aucune donnée sur les 7 derniers jours";
 }
 </script>
 
