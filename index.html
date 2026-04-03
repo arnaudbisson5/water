@@ -7,11 +7,13 @@
   <style>
     body { font-family: Arial, sans-serif; margin: 30px; }
     h1, h2 { color: #2c7; }
+
     input, button, select {
       padding: 8px;
       font-size: 15px;
       margin: 6px 0;
     }
+
     #loginBox, #deviceBox {
       border: 1px solid #ccc;
       padding: 15px;
@@ -19,15 +21,17 @@
       max-width: 420px;
       margin-bottom: 20px;
     }
+
     #dashboard { display: none; }
     .status { font-weight: bold; margin-top: 10px; }
+
     #debugBadge {
-      background: #f90;
+      background: #ffb347;
       color: #000;
       padding: 4px 8px;
       font-weight: bold;
-      display: inline-block;
       margin-bottom: 10px;
+      display: none;
     }
   </style>
 
@@ -42,12 +46,12 @@
 <body>
 
 <h1>🌱 Jardin en Eau</h1>
-
-<div id="debugBadge" style="display:none">MODE DEBUG – LOGIN BYPASS</div>
+<div id="debugBadge">MODE DEBUG – AUTH BYPASS</div>
 
 <!-- ================= LOGIN ================= -->
 <div id="loginBox">
   <h2>Connexion</h2>
+  <p>Email (ignoré en mode debug)</p>
   <input id="emailInput" type="email" placeholder="email@example.com">
   <br>
   <button onclick="login()">Recevoir le lien de connexion</button>
@@ -83,7 +87,11 @@
 
 <script>
 /* ================= MODE DEBUG ================= */
-const DEBUG_BYPASS_LOGIN = true; // 🔁 mettre false en prod
+const DEBUG_MODE = true;   // ⬅️ false en production
+
+if (DEBUG_MODE) {
+  document.getElementById("debugBadge").style.display = "inline-block";
+}
 
 /* ================= SUPABASE ================= */
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
@@ -96,35 +104,17 @@ const supabaseClient = supabase.createClient(
 
 let chart = null;
 
-/* ================= AUTH / UI ================= */
-async function updateUI() {
+/* ================= LOGIN ================= */
+async function login() {
 
-  if (DEBUG_BYPASS_LOGIN) {
-    debugBadge.style.display = "inline-block";
-    loginBox.style.display = "none";
-    dashboard.style.display = "block";
-    await loadUserDevices();
-    loadCurve();
+  /* ✅ MODE DEBUG : clic = accès direct */
+  if (DEBUG_MODE) {
+    console.warn("DEBUG: magic link ignoré, accès direct");
+    showDashboard();
     return;
   }
 
-  const { data } = await supabaseClient.auth.getUser();
-  const connected = !!data?.user;
-
-  loginBox.style.display = connected ? "none" : "block";
-  dashboard.style.display = connected ? "block" : "none";
-
-  if (connected) {
-    await loadUserDevices();
-    loadCurve();
-  }
-}
-
-supabaseClient.auth.onAuthStateChange(updateUI);
-updateUI();
-
-/* ================= LOGIN ================= */
-async function login() {
+  /* ✅ MODE NORMAL */
   const email = emailInput.value.trim();
   if (!email) return;
 
@@ -135,12 +125,22 @@ async function login() {
 
   loginStatus.textContent = error
     ? "❌ " + error.message
-    : "✅ Lien envoyé";
+    : "✅ Lien envoyé par email";
 }
 
-async function logout() {
-  await supabaseClient.auth.signOut();
-  location.reload();
+/* ================= UI ================= */
+function showDashboard() {
+  loginBox.style.display = "none";
+  dashboard.style.display = "block";
+  loadUserDevices().then(loadCurve);
+}
+
+function logout() {
+  if (DEBUG_MODE) {
+    location.reload();
+    return;
+  }
+  supabaseClient.auth.signOut().then(() => location.reload());
 }
 
 /* ================= MODULES ================= */
@@ -150,7 +150,6 @@ async function loadUserDevices() {
     .select("device_uid");
 
   deviceSelect.innerHTML = "";
-
   data?.forEach(d => {
     const opt = document.createElement("option");
     opt.value = d.device_uid;
@@ -166,42 +165,25 @@ periodSelect.addEventListener("change", loadCurve);
 function getTimeScale(period) {
   const now = new Date();
 
-  switch (period) {
-    case "1h":
-      return {
-        min: new Date(now - 1 * 60 * 60 * 1000),
-        max: now,
-        unit: "minute",
-        display: "HH:mm"
-      };
-    case "1d":
-      return {
-        min: new Date(now - 24 * 60 * 60 * 1000),
-        max: now,
-        unit: "hour",
-        display: "HH'h'"
-      };
-    case "7d":
-      return {
-        min: new Date(now - 6 * 24 * 60 * 60 * 1000),
-        max: now,
-        unit: "day",
-        display: "EEE"
-      };
-    case "30d":
-      return {
-        min: new Date(now - 29 * 24 * 60 * 60 * 1000),
-        max: now,
-        unit: "day",
-        display: "dd/MM"
-      };
-  }
+  if (period === "1h")
+    return { min: new Date(now - 3600000), max: now, unit: "minute", display: "HH:mm" };
+
+  if (period === "1d")
+    return { min: new Date(now - 86400000), max: now, unit: "hour", display: "HH'h'" };
+
+  if (period === "7d")
+    return { min: new Date(now - 6 * 86400000), max: now, unit: "day", display: "EEE" };
+
+  return { min: new Date(now - 29 * 86400000), max: now, unit: "day", display: "dd/MM" };
 }
 
 /* ================= COURBE ================= */
 async function loadCurve() {
   const deviceId = deviceSelect.value;
-  if (!deviceId) return;
+  if (!deviceId) {
+    status.textContent = "Aucun module sélectionné.";
+    return;
+  }
 
   const scale = getTimeScale(periodSelect.value);
   status.textContent = "Chargement...";
@@ -228,7 +210,7 @@ async function loadCurve() {
 
   if (chart) chart.destroy();
 
-  chart = new Chart(document.getElementById("chart"), {
+  chart = new Chart(chart, {
     type: "line",
     data: {
       datasets: [{
@@ -250,8 +232,7 @@ async function loadCurve() {
             unit: scale.unit,
             displayFormats: {
               [scale.unit]: scale.display
-            },
-            tooltipFormat: scale.display
+            }
           }
         },
         y: { min: 0, max: 100 }
@@ -259,11 +240,11 @@ async function loadCurve() {
     }
   });
 
-  status.textContent = points.length
-    ? "✅ Courbe affichée"
-    : "⚠️ Aucune donnée sur la période";
+  status.textContent =
+    points.length ? "✅ Courbe affichée" : "⚠️ Aucune donnée sur la période";
 }
 </script>
 
 </body>
 </html>
+``
