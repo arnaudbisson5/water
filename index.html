@@ -28,12 +28,13 @@
     .status { font-weight: bold; margin-top: 10px; }
   </style>
 
+  
   <!-- Chart.js -->
-  https://cdn.jsdelivr.net/npm/chart.js
-  https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns
+<script src="https://cdn.jsdelivr.net/npm/chart src="https://cdn/npm/chartjs-adapter-date-fns</script>
 
-  <!-- Supabase -->
-  https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2
+<!-- Supabase -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
 </head>
 <body>
 
@@ -118,11 +119,19 @@ async function login() {
   if (!email) return;
 
   loginStatus.textContent = "Envoi du lien...";
-  const { error } = await supabaseClient.auth.signInWithOtp({ email });
 
-  loginStatus.textContent = error
-    ? "Erreur : " + error.message
-    : "Lien envoyé, vérifiez vos emails.";
+  try {
+    const { error } = await supabaseClient.auth.signInWithOtp({ email });
+
+    if (error) {
+      loginStatus.textContent = "Erreur : " + error.message;
+    } else {
+      loginStatus.textContent = "✅ Lien envoyé, vérifiez vos emails.";
+    }
+  } catch (err) {
+    console.error(err);
+    loginStatus.textContent = "❌ Erreur technique (voir console)";
+  }
 }
 
 /* ============================================================
