@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8" />
-<title>Plant Curve CCC</title>
+<title>Plant Curve DDD</title>
 
 <style>
   body { font-family: Arial; margin: 30px; }
@@ -151,8 +151,11 @@ async function loadDevices(userId) {
 
 /* ================= LOAD CURVE ================= */
 async function loadCurve(deviceId) {
-  document.getElementById("status").textContent = "Chargement...";
-  document.getElementById("chartContainer").style.display = "block";
+  const status = document.getElementById("status");
+  const container = document.getElementById("chartContainer");
+
+  status.textContent = "⏳ Chargement...";
+  container.style.display = "block";
 
   const { data: mesures, error } = await supabaseClient
     .from("mesures")
@@ -160,13 +163,26 @@ async function loadCurve(deviceId) {
     .eq("device_uid", deviceId)
     .order("timestamp");
 
-  if (error || !mesures.length) {
-    document.getElementById("status").textContent = "Aucune donnée";
+  if (error) {
+    console.error(error);
+    status.textContent = "❌ Erreur chargement mesures";
     return;
   }
 
-  const humidity = mesures.map(m => ({ x: new Date(m.timestamp), y: m.humidity }));
-  const threshold = mesures.map(m => ({ x: new Date(m.timestamp), y: m.threshold }));
+  if (!mesures || mesures.length === 0) {
+    status.textContent = "⚠️ Aucune donnée pour ce module";
+    return;
+  }
+
+  const humidityPoints = mesures.map(m => ({
+    x: new Date(m.timestamp),
+    y: m.humidity
+  }));
+
+  const thresholdPoints = mesures.map(m => ({
+    x: new Date(m.timestamp),
+    y: m.threshold
+  }));
 
   if (chart) chart.destroy();
 
@@ -174,8 +190,18 @@ async function loadCurve(deviceId) {
     type: "line",
     data: {
       datasets: [
-        { label: "Humidité (%)", data: humidity, borderColor: "#2c7", tension: 0.2 },
-        { label: "Seuil (%)", data: threshold, borderColor: "red", pointRadius: 0 }
+        {
+          label: "Humidité (%)",
+          data: humidityPoints,
+          borderColor: "#2c7",
+          tension: 0.2
+        },
+        {
+          label: "Seuil (%)",
+          data: thresholdPoints,
+          borderColor: "red",
+          pointRadius: 0
+        }
       ]
     },
     options: {
@@ -189,9 +215,9 @@ async function loadCurve(deviceId) {
   });
 
   applyTimeScale();
-  document.getElementById("status").textContent = "✅ Courbe affichée";
+  status.textContent = "✅ Courbe affichée";
 }
-
+  
 /* ================= TIME SCALE ================= */
 function floorToTenMinutes(d) {
   const x = new Date(d);
