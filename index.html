@@ -89,33 +89,38 @@ function getSelectedDeviceId() {
 async function loadDevices() {
     const userId = document.getElementById("userIdInput").value.trim();
     const select = document.getElementById("deviceSelect");
+    const status = document.getElementById("status");
 
     select.innerHTML = "";
-    document.getElementById("status").textContent = "⏳ Chargement des modules…";
+    status.textContent = "⏳ Chargement des modules…";
 
-    const devices = await fetch(
-        `${SUPABASE_URL}/rest/v1/devices?user_id=eq.${userId}&order=created_at`,
-        {
-            headers: {
-                apikey: SUPABASE_KEY,
-                Authorization: "Bearer " + SUPABASE_KEY
-            }
+    const url =
+        `${SUPABASE_URL}/rest/v1/devices` +
+        `?user_id=eq.${encodeURIComponent(userId)}` +
+        `&order=created_at.asc`;
+
+    const devices = await fetch(url, {
+        headers: {
+            apikey: SUPABASE_KEY,
+            Authorization: "Bearer " + SUPABASE_KEY
         }
-    ).then(r => r.json());
+    }).then(r => r.json());
 
-    if (!devices.length) {
-        document.getElementById("status").textContent = "❌ Aucun module pour cet utilisateur";
+    console.log("Devices trouvés :", devices);
+
+    if (!Array.isArray(devices) || devices.length === 0) {
+        status.textContent = "❌ Aucun module pour cet utilisateur";
         return;
     }
 
     devices.forEach(d => {
         const o = document.createElement("option");
-        o.value = d.device_uid;
+        o.value = d.device_uid;          // ou d.device_id selon ta table
         o.textContent = d.name || d.device_uid;
         select.appendChild(o);
     });
 
-    document.getElementById("status").textContent = "✅ Modules chargés";
+    status.textContent = "✅ Modules chargés";
 }
 
 // --------------------------------------------------
