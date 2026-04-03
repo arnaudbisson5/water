@@ -3,7 +3,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8" />
-<title>Plant Curve ed03</title>
+<title>Plant Monitoring</title>
 
 <style>
   body { font-family: Arial; margin: 30px; }
@@ -18,6 +18,7 @@
     width: 100%;
     max-width: 900px;
     margin-top: 40px;
+    display: none;
   }
   #status {
     margin-top: 20px;
@@ -27,281 +28,167 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 
 <body>
 
-<h1>🌱 Courbe humidité + seuil + arrosages</h1>
+<h1>🌱 Monitoring</h1>
 
-<p><strong>Device ID :</strong></p>
-<input id="deviceIdInput" value="B483A21F8A3C" size="20">
+<!-- LOGIN -->
+<div id="loginBox">
+  <input id="emailInput" type="email" placeholder="email@gmail.com" />
+  <br>
+  <button onclick="login()">Recevoir le lien de connexion</button>
+</div>
 
-<br>
+<!-- APP -->
+<div id="appBox" style="display:none;">
+  <h2>Module</h2>
+  <select id="deviceSelect" onchange="loadCurve()"></select>
 
-<button onclick="loadCurve()">Afficher la courbe</button>
-<button onclick="sendWaterCommand()" style="background:#4CAF50;color:white;">
-  💧 Arroser maintenant
-</button>
-<button onclick="deleteEverything()" style="background:#b71c1c;color:white;">
-  🗑️ Effacer toutes les données
-</button>
+  <div id="status"></div>
 
-<h2>⚙️ Envoyer un seuil (%)</h2>
-<input id="thresholdInput" value="50" size="6">
-<button onclick="sendThreshold()" style="background:#2196F3;color:white;">
-  ✅ Enregistrer seuil
-</button>
+  <div id="chartContainer">
+    <canvas id="chart"></canvas>
+  </div>
 
-<h2>⏱️ Échelle de temps</h2>
-<select id="timeScale" onchange="applyTimeScale()">
-  <option value="hour">Dernière heure</option>
-  <option value="day" selected>Dernier jour</option>
-  <option value="week">Dernière semaine</option>
-  <option value="month">Dernier mois</option>
-</select>
-
-<div id="status"></div>
-
-<div id="chartContainer" style="display:none;">
-  <canvas id="chart"></canvas>
+  <br>
+  <button onclick="logout()">Déconnexion</button>
 </div>
 
 <script>
 // --------------------------------------------------
 // CONFIG
 // --------------------------------------------------
-const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
+const SUPABASE_URL = "https://arnaudbisson5.github.io/water/";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
+
+const supabase = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY
+);
 
 let chart = null;
 
 // --------------------------------------------------
-// OUTIL : ARRONDIR À 10 MINUTES
+// AUTH
 // --------------------------------------------------
-function floorToTenMinutes(date) {
-  const d = new Date(date);
-  d.setMinutes(Math.floor(d.getMinutes() / 10) * 10);
-  d.setSeconds(0);
-  d.setMilliseconds(0);
-  return d;
+async function login() {
+  const email = document.getElementById("emailInput").value.trim();
+  if (!email) return;
+
+  await supabase.auth.signInWithOtp({ email });
+  alert("Lien envoyé par email");
+}
+
+async function logout() {
+  await supabase.auth.signOut();
+  location.reload();
+}
+
+supabase.auth.onAuthStateChange((event, session) => {
+  if (event === "SIGNED_IN") initApp();
+});
+
+// --------------------------------------------------
+// INIT APP
+// --------------------------------------------------
+async function initApp() {
+  loginBox.style.display = "none";
+  appBox.style.display = "block";
+  await loadDevices();
 }
 
 // --------------------------------------------------
-// CHARGER LA COURBE
+// LOAD DEVICES (selon user_id connecté)
 // --------------------------------------------------
-async function loadCurve() {
-  const deviceId = document.getElementById("deviceIdInput").value.trim();
-  const status = document.getElementById("status");
-  const container = document.getElementById("chartContainer");
+async function loadDevices() {
+  const { data, error } = await supabase
+    .from("devices")
+    .select("device_uid, name")
+    .order("created_at");
 
-  status.textContent = "⏳ Chargement...";
-
-  const mesures = await fetch(
-    `${SUPABASE_URL}/rest/v1/mesures?device_id=eq.${deviceId}&order=timestamp.asc`,
-    {
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: "Bearer " + SUPABASE_KEY
-      }
-    }
-  ).then(r => r.json());
-
-  if (!mesures.length) {
-    status.textContent = "Aucune mesure.";
-    container.style.display = "none";
+  if (error || !data.length) {
+    status.textContent = "Aucun module";
     return;
   }
 
-  const cleaned = mesures.filter(m =>
-    m.timestamp &&
-    typeof m.humidity === "number" &&
-    typeof m.threshold === "number"
-  );
+  const select = document.getElementById("deviceSelect");
+  select.innerHTML = "";
 
-  const humidityPoints = cleaned.map(m => ({
+  data.forEach(d => {
+    const o = document.createElement("option");
+    o.value = d.device_uid;
+    o.textContent = d.name || d.device_uid;
+    select.appendChild(o);
+  });
+
+  loadCurve();
+}
+
+// --------------------------------------------------
+// LOAD CURVE (module sélectionné)
+// --------------------------------------------------
+async function loadCurve() {
+  const deviceId = deviceSelect.value;
+  if (!deviceId) return;
+
+  status.textContent = "Chargement...";
+  chartContainer.style.display = "block";
+
+  const { data, error } = await supabase
+    .from("mesures")
+    .select("timestamp, humidity, threshold")
+    .eq("device_uid", deviceId)
+    .order("timestamp");
+
+  if (error || !data.length) {
+    status.textContent = "Aucune donnée";
+    return;
+  }
+
+  const humidity = data.map(m => ({
     x: new Date(m.timestamp),
     y: m.humidity
   }));
 
-  const thresholdPoints = cleaned.map(m => ({
+  const threshold = data.map(m => ({
     x: new Date(m.timestamp),
     y: m.threshold
   }));
 
-  const actions = await fetch(
-    `${SUPABASE_URL}/rest/v1/actions?device_id=eq.${deviceId}&order=timestamp.asc`,
-    {
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: "Bearer " + SUPABASE_KEY
-      }
-    }
-  ).then(r => r.json());
-
-  function findClosestHumidity(date) {
-    let best = cleaned[0];
-    let dt = Math.abs(new Date(best.timestamp) - date);
-    for (let m of cleaned) {
-      let nd = Math.abs(new Date(m.timestamp) - date);
-      if (nd < dt) {
-        best = m;
-        dt = nd;
-      }
-    }
-    return best.humidity;
-  }
-
-  const waterRequests = actions
-    .filter(a => a.action === "water" && !a.processed)
-    .map(a => ({
-      x: new Date(a.timestamp),
-      y: findClosestHumidity(new Date(a.timestamp))
-    }));
-
-  const waterDone = actions
-    .filter(a => a.action === "water" && a.processed)
-    .map(a => ({
-      x: new Date(a.timestamp),
-      y: findClosestHumidity(new Date(a.timestamp))
-    }));
-
   if (chart) chart.destroy();
-  container.style.display = "block";
 
   chart = new Chart(document.getElementById("chart"), {
     type: "line",
     data: {
       datasets: [
-        { label: "Humidité (%)", data: humidityPoints, borderColor: "#2c7", tension: 0.2 },
-        { label: "Seuil (%)", data: thresholdPoints, borderColor: "red", pointRadius: 0 },
-        { label: "Demande arrosage", type: "scatter", data: waterRequests, pointBackgroundColor: "orange", pointRadius: 8 },
-        { label: "Arrosage exécuté", type: "scatter", data: waterDone, pointBackgroundColor: "green", pointRadius: 8 }
+        {
+          label: "Humidité (%)",
+          data: humidity,
+          borderColor: "#2c7",
+          tension: 0.2
+        },
+        {
+          label: "Seuil (%)",
+          data: threshold,
+          borderColor: "red",
+          pointRadius: 0
+        }
       ]
     },
     options: {
       parsing: false,
       responsive: true,
       scales: {
-        x: { type: "time", title: { display: true, text: "Date / Heure locale" } },
+        x: { type: "time" },
         y: { min: 0, max: 100 }
       }
     }
   });
 
-  status.textContent = "✅ Courbe prête";
-  applyTimeScale();
-}
-
-// --------------------------------------------------
-// ÉCHELLE DE TEMPS (ARRONDI DÉBUT + FIN)
-// --------------------------------------------------
-function applyTimeScale() {
-  if (!chart) return;
-
-  const scale = document.getElementById("timeScale").value;
-  const now = new Date();
-
-  // reset
-  chart.options.scales.x.time.unit = undefined;
-  chart.options.scales.x.time.displayFormats = {};
-  chart.options.scales.x.ticks = {};
-
-  let start, end;
-
-  if (scale === "hour") {
-    end = floorToTenMinutes(now);
-    start = floorToTenMinutes(
-      new Date(end.getTime() - 60 * 60 * 1000)
-    );
-
-    chart.options.scales.x.time.unit = "minute";
-    chart.options.scales.x.time.displayFormats = { minute: "HH:mm" };
-    chart.options.scales.x.ticks = { stepSize: 10 };
-  }
-
-  if (scale === "day") {
-    end = now;
-    start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  }
-
-  if (scale === "week") {
-    end = now;
-    start = new Date(now);
-    start.setHours(0, 0, 0, 0);
-    start.setDate(start.getDate() - 6);
-
-    chart.options.scales.x.time.unit = "day";
-    chart.options.scales.x.time.displayFormats = { day: "dd/MM" };
-  }
-
-  if (scale === "month") {
-    end = now;
-    start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  }
-
-  chart.options.scales.x.min = start;
-  chart.options.scales.x.max = end;
-  chart.update();
-}
-
-// --------------------------------------------------
-// COMMANDES (inchangées)
-// --------------------------------------------------
-async function sendWaterCommand() {
-  const deviceId = document.getElementById("deviceIdInput").value.trim();
-  await fetch(`${SUPABASE_URL}/rest/v1/actions`, {
-    method: "POST",
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: "Bearer " + SUPABASE_KEY,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      device_id: deviceId,
-      action: "water",
-      processed: false,
-      timestamp: new Date().toISOString()
-    })
-  });
-  loadCurve();
-}
-
-async function sendThreshold() {
-  const deviceId = document.getElementById("deviceIdInput").value.trim();
-  const threshold = parseFloat(document.getElementById("thresholdInput").value.trim());
-  await fetch(`${SUPABASE_URL}/rest/v1/actions`, {
-    method: "POST",
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: "Bearer " + SUPABASE_KEY,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      device_id: deviceId,
-      action: "set_threshold",
-      threshold,
-      processed: false,
-      timestamp: new Date().toISOString()
-    })
-  });
-  loadCurve();
-}
-
-async function deleteEverything() {
-  const deviceId = document.getElementById("deviceIdInput").value.trim();
-  if (!confirm("Effacer toutes les données ?")) return;
-
-  await fetch(`${SUPABASE_URL}/rest/v1/mesures?device_id=eq.${deviceId}`, {
-    method: "DELETE",
-    headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY }
-  });
-
-  await fetch(`${SUPABASE_URL}/rest/v1/actions?device_id=eq.${deviceId}`, {
-    method: "DELETE",
-    headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY }
-  });
-
-  loadCurve();
+  status.textContent = "✅ Courbe affichée";
 }
 </script>
 
