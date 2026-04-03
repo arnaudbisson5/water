@@ -223,10 +223,24 @@ function applyTimeScale() {
   const now = new Date();
   let start;
 
-  if (scale === "hour")     start = new Date(now.getTime() - 60 * 60 * 1000);
-  if (scale === "day")      start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  if (scale === "week")     start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  if (scale === "month")    start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  if (scale === "hour") {
+    start = new Date(now.getTime() - 60 * 60 * 1000);
+  }
+
+  if (scale === "day") {
+    start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  }
+
+  if (scale === "week") {
+    // ✅ début du jour (00:00) il y a 6 jours
+    start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - 6);
+  }
+
+  if (scale === "month") {
+    start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  }
 
   chart.options.scales.x.min = start;
   chart.options.scales.x.max = now;
