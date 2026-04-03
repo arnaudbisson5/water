@@ -1,7 +1,7 @@
 <!"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo">
-<h1>🚨 TEST 0003 🚨</h1>
+<h1>🚨 TEST 0004 🚨</h1>
 <!DOCTYPE html>
-<html>
+<html lang="fr">
 <head>
 <meta charset="UTF-8" />
 <title>Plant Curve</title>
@@ -21,15 +21,15 @@
     margin-top: 40px;
   }
   #status {
-    margin-top:20px;
-    font-weight:bold;
+    margin-top: 20px;
+    font-weight: bold;
   }
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
-
 </head>
+
 <body>
 
 <h1>🌱 Courbe humidité + seuil + arrosages</h1>
@@ -53,6 +53,14 @@
   ✅ Enregistrer seuil
 </button>
 
+<h2>⏱️ Échelle de temps</h2>
+<select id="timeScale" onchange="applyTimeScale()">
+  <option value="hour">Dernière heure</option>
+  <option value="day" selected>Dernier jour</option>
+  <option value="week">Dernière semaine</option>
+  <option value="month">Dernier mois</option>
+</select>
+
 <div id="status"></div>
 
 <div id="chartContainer" style="display:none;">
@@ -60,11 +68,17 @@
 </div>
 
 <script>
+// --------------------------------------------------
+// CONFIG
+// --------------------------------------------------
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
 
 let chart = null;
 
+// --------------------------------------------------
+// CHARGER LA COURBE
+// --------------------------------------------------
 async function loadCurve() {
   const deviceId = document.getElementById("deviceIdInput").value.trim();
   const status = document.getElementById("status");
@@ -186,29 +200,56 @@ async function loadCurve() {
       scales: {
         x: {
           type: "time",
-          title: {
-            text: "Date / Heure locale",
-            display: true
-          }
+          title: { text: "Date / Heure locale", display: true }
         },
         y: {
           min: 0,
           max: 100,
-          title: {
-            text: "Humidité (%)",
-            display: true
-          }
+          title: { text: "Humidité (%)", display: true }
         }
       }
     }
   });
 
   status.textContent = "✅ Courbe prête";
+  applyTimeScale();
 }
 
+// --------------------------------------------------
+// CHANGEMENT D’ÉCHELLE X
+// --------------------------------------------------
+function applyTimeScale() {
+  if (!chart) return;
+
+  const scale = document.getElementById("timeScale").value;
+  const now = new Date();
+  let start;
+
+  switch (scale) {
+    case "hour":
+      start = new Date(now.getTime() - 1 * 60 * 60 * 1000);
+      break;
+    case "day":
+      start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      break;
+    case "week":
+      start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      break;
+    case "month":
+      start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      break;
+  }
+
+  chart.options.scales.x.min = start;
+  chart.options.scales.x.max = now;
+  chart.update();
+}
+
+// --------------------------------------------------
+// COMMANDES
+// --------------------------------------------------
 async function sendWaterCommand() {
   const deviceId = document.getElementById("deviceIdInput").value.trim();
-
   await fetch(`${SUPABASE_URL}/rest/v1/actions`, {
     method: "POST",
     headers: {
@@ -223,14 +264,12 @@ async function sendWaterCommand() {
       timestamp: new Date().toISOString()
     })
   });
-
   loadCurve();
 }
 
 async function sendThreshold() {
   const deviceId = document.getElementById("deviceIdInput").value.trim();
   const threshold = parseFloat(document.getElementById("thresholdInput").value.trim());
-
   await fetch(`${SUPABASE_URL}/rest/v1/actions`, {
     method: "POST",
     headers: {
@@ -241,12 +280,11 @@ async function sendThreshold() {
     body: JSON.stringify({
       device_id: deviceId,
       action: "set_threshold",
-      threshold: threshold,
+      threshold,
       processed: false,
       timestamp: new Date().toISOString()
     })
   });
-
   loadCurve();
 }
 
