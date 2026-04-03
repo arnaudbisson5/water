@@ -1,4 +1,4 @@
-<!const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";>
+<"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo">
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -25,18 +25,13 @@
 
     #dashboard { display: none; }
     .status { font-weight: bold; margin-top: 10px; }
-
-    #debugSwitch {
-      margin-bottom: 12px;
-      padding: 6px;
-      border: 1px dashed #aaa;
-    }
+    #debugSwitch { margin-bottom: 10px; }
   </style>
 
-  <!-- ✅ SCRIPTS CORRIGÉS -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns" defer></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+  <!-- Librairies -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+  https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2
 </head>
 
 <body>
@@ -47,7 +42,7 @@
   <div id="debugSwitch">
     <label>
       <input type="checkbox" id="debugToggle">
-      Mode debug
+      Mode debug (bypass magic link)
     </label>
   </div>
 
@@ -75,18 +70,36 @@
 </div>
 
 <script>
-window.addEventListener("DOMContentLoaded", () => {
-
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
+const SUPABASE_KEY = ""eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo"";
+
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let chart = null;
 
+/* ================= DEBUG ================= */
 function isDebug() {
   return document.getElementById("debugToggle").checked;
 }
 
-window.login = async function() {
+/* ================= UI AUTH ================= */
+async function updateUI() {
+  const { data } = await supabaseClient.auth.getUser();
+  const logged = !!data?.user;
+
+  loginBox.style.display = logged ? "none" : "block";
+  dashboard.style.display = logged ? "block" : "none";
+
+  if (logged) {
+    await loadUserDevices();
+    loadCurve();
+  }
+}
+
+supabaseClient.auth.onAuthStateChange(updateUI);
+updateUI();
+
+/* ================= LOGIN / LOGOUT ================= */
+async function login() {
   if (isDebug()) {
     loginBox.style.display = "none";
     dashboard.style.display = "block";
@@ -98,50 +111,65 @@ window.login = async function() {
   const email = emailInput.value.trim();
   if (!email) return;
 
-  loginStatus.textContent = "Envoi...";
+  loginStatus.textContent = "Envoi du lien...";
   const { error } = await supabaseClient.auth.signInWithOtp({ email });
-  loginStatus.textContent = error ? "❌ " + error.message : "✅ Lien envoyé";
+  loginStatus.textContent = error
+    ? "❌ " + error.message
+    : "✅ Lien envoyé";
 }
 
-window.logout = async function() {
+async function logout() {
   await supabaseClient.auth.signOut();
   location.reload();
 }
 
+/* ================= MODULES ================= */
 async function loadUserDevices() {
-  const { data } = await supabaseClient
+  const { data, error } = await supabaseClient
     .from("devices")
     .select("device_uid, name")
     .order("created_at");
 
+  if (error) {
+    console.error(error);
+    return;
+  }
+
   deviceSelect.innerHTML = "";
-  data?.forEach(d => {
-    const o = document.createElement("option");
-    o.value = d.device_uid;
-    o.textContent = d.name || d.device_uid;
-    deviceSelect.appendChild(o);
+  data.forEach(d => {
+    const opt = document.createElement("option");
+    opt.value = d.device_uid;
+    opt.textContent = d.name || d.device_uid;
+    deviceSelect.appendChild(opt);
   });
 }
 
-window.loadCurve = async function() {
+deviceSelect.addEventListener("change", loadCurve);
+
+/* ================= COURBE – DERNIÈRE SEMAINE ================= */
+async function loadCurve() {
   const uid = deviceSelect.value;
   if (!uid) return;
 
   status.textContent = "Chargement...";
 
-  const since = new Date(Date.now() - 7*24*60*60*1000).toISOString();
+  const since = new Date(
+    Date.now() - 7 * 24 * 60 * 60 * 1000
+  ).toISOString();
 
-  const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/mesures?device_uid=eq.${uid}&timestamp=gte.${since}&order=timestamp.asc`,
-    {
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: "Bearer " + SUPABASE_KEY
-      }
-    }
-  );
+  /* ✅ API Supabase officielle (gère le token utilisateur automatiquement) */
+  const { data: mesures, error } = await supabaseClient
+    .from("mesures")
+    .select("timestamp, humidity")
+    .eq("device_uid", uid)
+    .gte("timestamp", since)
+    .order("timestamp");
 
-  const mesures = await res.json();
+  if (error) {
+    console.error(error);
+    status.textContent = "❌ Erreur de lecture des données";
+    return;
+  }
 
   const points = mesures.map(m => ({
     x: new Date(m.timestamp),
@@ -154,13 +182,14 @@ window.loadCurve = async function() {
     type: "line",
     data: {
       datasets: [{
-        label: "Humidité – 7 jours",
+        label: "Humidité (%) – 7 derniers jours",
         data: points,
         borderColor: "#2c7",
         tension: 0.2
       }]
     },
     options: {
+      responsive: true,
       scales: {
         x: { type: "time" },
         y: { min: 0, max: 100 }
@@ -168,10 +197,9 @@ window.loadCurve = async function() {
     }
   });
 
-  status.textContent = "✅";
+  status.textContent =
+    points.length ? "✅ Courbe affichée" : "⚠️ Aucune donnée";
 }
-
-});
 </script>
 
 </body>
