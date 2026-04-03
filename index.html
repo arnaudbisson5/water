@@ -21,6 +21,7 @@
     }
     #dashboard { display: none; }
     .status { font-weight: bold; margin-top: 10px; }
+    #debugSwitch { margin-bottom: 15px; }
   </style>
 
   <!-- Chart.js -->
@@ -35,6 +36,13 @@
 
 <h1>🌱 Jardin en Eau</h1>
 
+<div id="debugSwitch">
+  <label>
+    <input type="checkbox" id="debugToggle">
+    Mode debug (bypass magic link)
+  </label>
+</div>
+
 <div id="loginBox">
   <h2>Connexion</h2>
   <input id="emailInput" type="email" placeholder="email@example.com">
@@ -44,7 +52,6 @@
 </div>
 
 <div id="dashboard">
-
   <div id="deviceBox">
     <h2>Modules</h2>
     <select id="deviceSelect"></select>
@@ -61,11 +68,17 @@
 </div>
 
 <script>
+/* ================= CONFIG ================= */
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let chart = null;
+
+/* ================= MODE DEBUG ================= */
+function isDebugMode() {
+  return document.getElementById("debugToggle").checked;
+}
 
 /* ================= AUTH UI ================= */
 async function updateUI() {
@@ -80,17 +93,29 @@ async function updateUI() {
     loadCurve();
   }
 }
+
 supabaseClient.auth.onAuthStateChange(updateUI);
 updateUI();
 
 /* ================= LOGIN ================= */
 async function login() {
+  if (isDebugMode()) {
+    loginBox.style.display = "none";
+    dashboard.style.display = "block";
+    await loadUserDevices();
+    loadCurve();
+    return;
+  }
+
   const email = emailInput.value.trim();
   if (!email) return;
 
   loginStatus.textContent = "Envoi du lien...";
   const { error } = await supabaseClient.auth.signInWithOtp({ email });
-  loginStatus.textContent = error ? "❌ " + error.message : "✅ Lien envoyé";
+
+  loginStatus.textContent = error
+    ? "❌ " + error.message
+    : "✅ Lien envoyé";
 }
 
 async function logout() {
