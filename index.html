@@ -7,13 +7,11 @@
   <style>
     body { font-family: Arial, sans-serif; margin: 30px; }
     h1, h2 { color: #2c7; }
-
     input, button, select {
       padding: 8px;
       font-size: 15px;
       margin: 6px 0;
     }
-
     #loginBox, #deviceBox {
       border: 1px solid #ccc;
       padding: 15px;
@@ -21,16 +19,15 @@
       max-width: 420px;
       margin-bottom: 20px;
     }
-
     #dashboard { display: none; }
     .status { font-weight: bold; margin-top: 10px; }
   </style>
 
-  <!-- ✅ Chart.js -->
+  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
 
-  <!-- ✅ Supabase -->
+  <!-- Supabase -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 
@@ -38,7 +35,6 @@
 
 <h1>🌱 Jardin en Eau</h1>
 
-<!-- ================= LOGIN ================= -->
 <div id="loginBox">
   <h2>Connexion</h2>
   <input id="emailInput" type="email" placeholder="email@example.com">
@@ -47,7 +43,6 @@
   <p id="loginStatus" class="status"></p>
 </div>
 
-<!-- ================= DASHBOARD ================= -->
 <div id="dashboard">
 
   <div id="deviceBox">
@@ -60,28 +55,19 @@
 
   <div id="status" class="status"></div>
 
-  <div style="max-width: 900px; margin-top: 20px;">
+  <div style="max-width:900px;margin-top:20px">
     <canvas id="chart"></canvas>
   </div>
 </div>
 
 <script>
-/* ============================================================
-   SUPABASE
-============================================================ */
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
 
-const supabaseClient = supabase.createClient(
-  SUPABASE_URL,
-  SUPABASE_KEY
-);
-
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let chart = null;
 
-/* ============================================================
-   AUTH UI
-============================================================ */
+/* ================= AUTH UI ================= */
 async function updateUI() {
   const { data } = await supabaseClient.auth.getUser();
   const logged = !!data?.user;
@@ -94,25 +80,17 @@ async function updateUI() {
     loadCurve();
   }
 }
-
 supabaseClient.auth.onAuthStateChange(updateUI);
 updateUI();
 
-/* ============================================================
-   LOGIN / LOGOUT
-============================================================ */
+/* ================= LOGIN ================= */
 async function login() {
   const email = emailInput.value.trim();
   if (!email) return;
 
-  loginStatus.textContent = "Envoi du lien…";
-
-  const { error } =
-    await supabaseClient.auth.signInWithOtp({ email });
-
-  loginStatus.textContent = error
-    ? "❌ " + error.message
-    : "✅ Lien envoyé";
+  loginStatus.textContent = "Envoi du lien...";
+  const { error } = await supabaseClient.auth.signInWithOtp({ email });
+  loginStatus.textContent = error ? "❌ " + error.message : "✅ Lien envoyé";
 }
 
 async function logout() {
@@ -120,9 +98,7 @@ async function logout() {
   location.reload();
 }
 
-/* ============================================================
-   MODULES
-============================================================ */
+/* ================= MODULES ================= */
 async function loadUserDevices() {
   const { data, error } = await supabaseClient
     .from("devices")
@@ -135,7 +111,6 @@ async function loadUserDevices() {
   }
 
   deviceSelect.innerHTML = "";
-
   data.forEach(d => {
     const opt = document.createElement("option");
     opt.value = d.device_uid;
@@ -146,34 +121,34 @@ async function loadUserDevices() {
 
 deviceSelect.addEventListener("change", loadCurve);
 
-/* ============================================================
-   COURBE – DERNIÈRE SEMAINE UNIQUEMENT
-============================================================ */
+/* ================= COURBE (7 JOURS) ================= */
 async function loadCurve() {
   const deviceUid = deviceSelect.value;
   if (!deviceUid) return;
 
-  status.textContent = "Chargement…";
+  status.textContent = "Chargement...";
 
   const oneWeekAgo = new Date(
     Date.now() - 7 * 24 * 60 * 60 * 1000
   ).toISOString();
 
-  const url =
-    `${SUPABASE_URL}/rest/v1/mesures` +
-    `?device_uid=eq.${deviceUid}` +
-    `&timestamp=gte.${oneWeekAgo}` +
-    `&order=timestamp.asc`;
-
-  const res = await fetch(url, {
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: "Bearer " + SUPABASE_KEY
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/mesures?device_uid=eq.${deviceUid}&timestamp=gte.${oneWeekAgo}&order=timestamp.asc`,
+    {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: "Bearer " + SUPABASE_KEY
+      }
     }
-  });
+  );
 
   const mesures = await res.json();
-  console.log("Mesures:", mesures);
+
+  if (!Array.isArray(mesures)) {
+    console.error("Erreur Supabase:", mesures);
+    status.textContent = "❌ Erreur de lecture des données";
+    return;
+  }
 
   const points = mesures.map(m => ({
     x: new Date(m.timestamp),
@@ -182,37 +157,27 @@ async function loadCurve() {
 
   if (chart) chart.destroy();
 
-  chart = new Chart(
-    document.getElementById("chart"),
-    {
-      type: "line",
-      data: {
-        datasets: [{
-          label: "Humidité (%) — 7 jours",
-          data: points,
-          borderColor: "#2c7",
-          tension: 0.2
-        }]
-      },
-      options: {
-        responsive: true,
-        scales: {
-          x: {
-            type: "time"
-          },
-          y: {
-            min: 0,
-            max: 100
-          }
-        }
+  chart = new Chart(document.getElementById("chart"), {
+    type: "line",
+    data: {
+      datasets: [{
+        label: "Humidité (%) – 7 derniers jours",
+        data: points,
+        borderColor: "#2c7",
+        tension: 0.2
+      }]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        x: { type: "time" },
+        y: { min: 0, max: 100 }
       }
     }
-  );
+  });
 
   status.textContent =
-    points.length
-      ? "✅ Courbe affichée"
-      : "⚠️ Aucune donnée sur les 7 derniers jours";
+    points.length ? "✅ Courbe affichée" : "⚠️ Aucune donnée";
 }
 </script>
 
