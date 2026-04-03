@@ -24,15 +24,6 @@
 
     #dashboard { display: none; }
     .status { font-weight: bold; margin-top: 10px; }
-
-    #debugBadge {
-      background: #ffa500;
-      color: #000;
-      padding: 4px 8px;
-      font-weight: bold;
-      margin-bottom: 10px;
-      display: none;
-    }
   </style>
 
   <!-- ✅ Chart.js -->
@@ -46,11 +37,11 @@
 <body>
 
 <h1>🌱 Jardin en Eau</h1>
-<div id="debugBadge">MODE DEBUG – OTP BLOQUÉ</div>
 
 <!-- ================= LOGIN ================= -->
 <div id="loginBox">
   <h2>Connexion</h2>
+  <p>Entrez votre email pour recevoir un lien magique :</p>
   <input id="emailInput" type="email" placeholder="email@example.com">
   <br>
   <button onclick="login()">Recevoir le lien de connexion</button>
@@ -62,6 +53,7 @@
 
   <div id="deviceBox">
     <h2>Modules</h2>
+
     <label><strong>Module actif :</strong></label><br>
     <select id="deviceSelect"></select>
   </div>
@@ -76,7 +68,7 @@
 
   <br><br>
   <button onclick="loadCurve()">Afficher la courbe</button>
-  <button onclick="logout()">Déconnexion</button>
+  <button onclick="logout()">🚪 Déconnexion</button>
 
   <div id="status" class="status"></div>
 
@@ -87,16 +79,7 @@
 
 <script>
 /* ============================================================
-   MODE DEBUG
-============================================================ */
-const DEBUG_MODE = false; // 🔁 mettre false en production
-
-if (DEBUG_MODE) {
-  debugBadge.style.display = "inline-block";
-}
-
-/* ============================================================
-   SUPABASE
+   CONFIG SUPABASE
 ============================================================ */
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
@@ -106,43 +89,47 @@ const supabaseClient = supabase.createClient(
   SUPABASE_KEY
 );
 
-/* 🔥 BLOQUAGE TOTAL DU MAGIC LINK EN DEBUG */
-if (DEBUG_MODE) {
-  supabaseClient.auth.signInWithOtp = async () => {
-    console.warn("DEBUG: signInWithOtp bloqué");
-    return { data: null, error: null };
-  };
-}
+let chart = null;
 
 /* ============================================================
-   LOGIN
+   AUTH UI
 ============================================================ */
-function login() {
-  if (DEBUG_MODE) {
-    showDashboard();
-    return;
-  }
+async function updateUI() {
+  const { data } = await supabaseClient.auth.getUser();
 
+  const isLoggedIn = !!data?.user;
+
+  loginBox.style.display = isLoggedIn ? "none" : "block";
+  dashboard.style.display = isLoggedIn ? "block" : "none";
+
+  if (isLoggedIn) {
+    await loadUserDevices();
+    loadCurve();
+  }
+}
+
+supabaseClient.auth.onAuthStateChange(updateUI);
+updateUI();
+
+/* ============================================================
+   LOGIN / LOGOUT
+============================================================ */
+async function login() {
   const email = emailInput.value.trim();
   if (!email) return;
 
   loginStatus.textContent = "Envoi du lien...";
 
-  supabaseClient.auth.signInWithOtp({ email })
-    .then(({ error }) => {
-      loginStatus.textContent = error
-        ? "❌ " + error.message
-        : "✅ Lien envoyé";
-    });
+  const { error } =
+    await supabaseClient.auth.signInWithOtp({ email });
+
+  loginStatus.textContent = error
+    ? "❌ " + error.message
+    : "✅ Lien envoyé, vérifiez vos emails.";
 }
 
-function showDashboard() {
-  loginBox.style.display = "none";
-  dashboard.style.display = "block";
-  loadUserDevices().then(loadCurve);
-}
-
-function logout() {
+async function logout() {
+  await supabaseClient.auth.signOut();
   location.reload();
 }
 
@@ -194,14 +181,9 @@ function getTimeScale(period) {
 /* ============================================================
    COURBE
 ============================================================ */
-let chart = null;
-
 async function loadCurve() {
   const deviceId = deviceSelect.value;
-  if (!deviceId) {
-    status.textContent = "Aucun module sélectionné.";
-    return;
-  }
+  if (!deviceId) return;
 
   const scale = getTimeScale(periodSelect.value);
   status.textContent = "Chargement...";
@@ -253,7 +235,10 @@ async function loadCurve() {
             }
           }
         },
-        y: { min: 0, max: 100 }
+        y: {
+          min: 0,
+          max: 100
+        }
       }
     }
   });
