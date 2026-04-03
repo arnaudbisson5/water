@@ -157,17 +157,23 @@ async function loadCurve(deviceId) {
   status.textContent = "⏳ Chargement...";
   container.style.display = "block";
 
-  const { data: mesures, error } = await supabaseClient
-    .from("mesures")
-    .select("timestamp, humidity, threshold")
-    .eq("device_uid", deviceId)
-    .order("timestamp");
+  
+const { data: mesures, error } = await supabaseClient
+  .from("mesures")
+  .select("timestamp, humidity, threshold")
+  .eq("device_uid", deviceId)
+  .order("timestamp");
 
-  if (error) {
-    console.error(error);
-    status.textContent = "❌ Erreur chargement mesures";
-    return;
-  }
+console.log("deviceId =", deviceId);
+console.log("mesures =", mesures);
+console.error("error =", error);
+
+if (error) {
+  document.getElementById("status").textContent =
+    "❌ Erreur chargement mesures: " + error.message;
+  return;
+}
+
 
   if (!mesures || mesures.length === 0) {
     status.textContent = "⚠️ Aucune donnée pour ce module";
