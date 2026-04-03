@@ -7,11 +7,13 @@
   <style>
     body { font-family: Arial, sans-serif; margin: 30px; }
     h1, h2 { color: #2c7; }
+
     input, button, select {
       padding: 8px;
       font-size: 15px;
       margin: 6px 0;
     }
+
     #loginBox, #deviceBox {
       border: 1px solid #ccc;
       padding: 15px;
@@ -19,31 +21,29 @@
       max-width: 420px;
       margin-bottom: 20px;
     }
+
     #dashboard { display: none; }
     .status { font-weight: bold; margin-top: 10px; }
-    #debugSwitch { margin-bottom: 15px; }
+    #debugSwitch { margin-bottom: 10px; }
   </style>
 
-  <!-- Chart.js -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
-
-  <!-- Supabase -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-</head>
-
-<body>
+  <!-- ✅ Scripts corrects -->
+https://cdn.jsdelivr.net/npm/chart.js@4
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2dy>
 
 <h1>🌱 Jardin en Eau</h1>
 
-<div id="debugSwitch">
-  <label>
-    <input type="checkbox" id="debugToggle">
-    Mode debug (bypass magic link)
-  </label>
-</div>
-
+<!-- ================= LOGIN ================= -->
 <div id="loginBox">
+
+  <!-- ✅ SWITCH DEBUG (VISIBLE ICI) -->
+  <div id="debugSwitch">
+    <label>
+      <input type="checkbox" id="debugToggle">
+      Mode debug (bypass magic link)
+    </label>
+  </div>
+
   <h2>Connexion</h2>
   <input id="emailInput" type="email" placeholder="email@example.com">
   <br>
@@ -51,7 +51,9 @@
   <p id="loginStatus" class="status"></p>
 </div>
 
+<!-- ================= DASHBOARD ================= -->
 <div id="dashboard">
+
   <div id="deviceBox">
     <h2>Modules</h2>
     <select id="deviceSelect"></select>
@@ -75,31 +77,14 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let chart = null;
 
-/* ================= MODE DEBUG ================= */
-function isDebugMode() {
+/* ================= DEBUG ================= */
+function isDebug() {
   return document.getElementById("debugToggle").checked;
 }
 
-/* ================= AUTH UI ================= */
-async function updateUI() {
-  const { data } = await supabaseClient.auth.getUser();
-  const logged = !!data?.user;
-
-  loginBox.style.display = logged ? "none" : "block";
-  dashboard.style.display = logged ? "block" : "none";
-
-  if (logged) {
-    await loadUserDevices();
-    loadCurve();
-  }
-}
-
-supabaseClient.auth.onAuthStateChange(updateUI);
-updateUI();
-
 /* ================= LOGIN ================= */
 async function login() {
-  if (isDebugMode()) {
+  if (isDebug()) {
     loginBox.style.display = "none";
     dashboard.style.display = "block";
     await loadUserDevices();
@@ -110,12 +95,9 @@ async function login() {
   const email = emailInput.value.trim();
   if (!email) return;
 
-  loginStatus.textContent = "Envoi du lien...";
+  loginStatus.textContent = "Envoi du lien…";
   const { error } = await supabaseClient.auth.signInWithOtp({ email });
-
-  loginStatus.textContent = error
-    ? "❌ " + error.message
-    : "✅ Lien envoyé";
+  loginStatus.textContent = error ? "❌ " + error.message : "✅ Lien envoyé";
 }
 
 async function logout() {
@@ -130,35 +112,28 @@ async function loadUserDevices() {
     .select("device_uid, name")
     .order("created_at");
 
-  if (error) {
-    console.error(error);
-    return;
-  }
+  if (error) return console.error(error);
 
   deviceSelect.innerHTML = "";
   data.forEach(d => {
-    const opt = document.createElement("option");
-    opt.value = d.device_uid;
-    opt.textContent = d.name || d.device_uid;
-    deviceSelect.appendChild(opt);
+    const o = document.createElement("option");
+    o.value = d.device_uid;
+    o.textContent = d.name || d.device_uid;
+    deviceSelect.appendChild(o);
   });
 }
 
-deviceSelect.addEventListener("change", loadCurve);
-
 /* ================= COURBE (7 JOURS) ================= */
 async function loadCurve() {
-  const deviceUid = deviceSelect.value;
-  if (!deviceUid) return;
+  const uid = deviceSelect.value;
+  if (!uid) return;
 
-  status.textContent = "Chargement...";
+  status.textContent = "Chargement…";
 
-  const oneWeekAgo = new Date(
-    Date.now() - 7 * 24 * 60 * 60 * 1000
-  ).toISOString();
+  const since = new Date(Date.now() - 7*24*60*60*1000).toISOString();
 
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/mesures?device_uid=eq.${deviceUid}&timestamp=gte.${oneWeekAgo}&order=timestamp.asc`,
+    `${SUPABASE_URL}/rest/v1/mesures?device_uid=eq.${uid}&timestamp=gte.${since}&order=timestamp.asc`,
     {
       headers: {
         apikey: SUPABASE_KEY,
@@ -168,12 +143,7 @@ async function loadCurve() {
   );
 
   const mesures = await res.json();
-
-  if (!Array.isArray(mesures)) {
-    console.error("Erreur Supabase:", mesures);
-    status.textContent = "❌ Erreur de lecture des données";
-    return;
-  }
+  if (!Array.isArray(mesures)) return status.textContent = "❌ Erreur";
 
   const points = mesures.map(m => ({
     x: new Date(m.timestamp),
@@ -186,7 +156,7 @@ async function loadCurve() {
     type: "line",
     data: {
       datasets: [{
-        label: "Humidité (%) – 7 derniers jours",
+        label: "Humidité (%) – 7 jours",
         data: points,
         borderColor: "#2c7",
         tension: 0.2
@@ -201,8 +171,7 @@ async function loadCurve() {
     }
   });
 
-  status.textContent =
-    points.length ? "✅ Courbe affichée" : "⚠️ Aucune donnée";
+  status.textContent = "✅";
 }
 </script>
 
