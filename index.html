@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Jardin en Eau</title>
 
   <style>
@@ -26,8 +26,8 @@
     .status { font-weight: bold; margin-top: 10px; }
 
     #debugBadge {
-      background: #ffb347;
-      color: #000;
+      background: #ffa500;
+      color: black;
       padding: 4px 8px;
       font-weight: bold;
       margin-bottom: 10px;
@@ -46,14 +46,13 @@
 <body>
 
 <h1>🌱 Jardin en Eau</h1>
-<div id="debugBadge">MODE DEBUG – AUTH BYPASS</div>
+<div id="debugBadge">MODE DEBUG – AUTH OTP BLOQUÉ</div>
 
 <!-- ================= LOGIN ================= -->
 <div id="loginBox">
   <h2>Connexion</h2>
-  <p>Email (ignoré en mode debug)</p>
-  <input id="emailInput" type="email" placeholder="email@example.com">
-  <br>
+  <input id="emailInput" type="email" placeholder="email@example.com" />
+  <br />
   <button onclick="login()">Recevoir le lien de connexion</button>
   <p id="loginStatus" class="status"></p>
 </div>
@@ -66,7 +65,7 @@
     <select id="deviceSelect"></select>
   </div>
 
-  <label><strong>Période :</strong></label><br>
+  <label><strong>Période :</strong></label><br />
   <select id="periodSelect">
     <option value="1h">Dernière heure</option>
     <option value="1d" selected>Dernier jour</option>
@@ -74,26 +73,30 @@
     <option value="30d">Dernier mois</option>
   </select>
 
-  <br><br>
+  <br /><br />
   <button onclick="loadCurve()">Afficher la courbe</button>
   <button onclick="logout()">Déconnexion</button>
 
   <div id="status" class="status"></div>
 
-  <div style="max-width:900px; margin-top:20px;">
+  <div style="max-width: 900px; margin-top: 20px;">
     <canvas id="chart"></canvas>
   </div>
 </div>
 
 <script>
-/* ================= MODE DEBUG ================= */
-const DEBUG_MODE = true;   // ⬅️ false en production
+/* ============================================================
+   🔧 MODE DEBUG
+   ============================================================ */
+const DEBUG_MODE = true; // 🔁 mettre false en production
 
 if (DEBUG_MODE) {
-  document.getElementById("debugBadge").style.display = "inline-block";
+  debugBadge.style.display = "inline-block";
 }
 
-/* ================= SUPABASE ================= */
+/* ============================================================
+   SUPABASE
+   ============================================================ */
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
 
@@ -102,19 +105,25 @@ const supabaseClient = supabase.createClient(
   SUPABASE_KEY
 );
 
-let chart = null;
+/* 🔥 BLOCAGE TOTAL DU MAGIC LINK EN DEBUG */
+if (DEBUG_MODE) {
+  supabaseClient.auth.signInWithOtp = async () => {
+    console.warn("DEBUG: signInWithOtp BLOQUÉ");
+    return { data: null, error: null };
+  };
+}
 
-/* ================= LOGIN ================= */
+/* ============================================================
+   LOGIN
+   ============================================================ */
 async function login() {
 
-  /* ✅ MODE DEBUG : clic = accès direct */
   if (DEBUG_MODE) {
-    console.warn("DEBUG: magic link ignoré, accès direct");
+    console.warn("DEBUG: accès direct au dashboard");
     showDashboard();
     return;
   }
 
-  /* ✅ MODE NORMAL */
   const email = emailInput.value.trim();
   if (!email) return;
 
@@ -125,10 +134,9 @@ async function login() {
 
   loginStatus.textContent = error
     ? "❌ " + error.message
-    : "✅ Lien envoyé par email";
+    : "✅ Lien envoyé";
 }
 
-/* ================= UI ================= */
 function showDashboard() {
   loginBox.style.display = "none";
   dashboard.style.display = "block";
@@ -136,14 +144,12 @@ function showDashboard() {
 }
 
 function logout() {
-  if (DEBUG_MODE) {
-    location.reload();
-    return;
-  }
-  supabaseClient.auth.signOut().then(() => location.reload());
+  location.reload();
 }
 
-/* ================= MODULES ================= */
+/* ============================================================
+   MODULES
+   ============================================================ */
 async function loadUserDevices() {
   const { data } = await supabaseClient
     .from("devices")
@@ -161,29 +167,30 @@ async function loadUserDevices() {
 deviceSelect.addEventListener("change", loadCurve);
 periodSelect.addEventListener("change", loadCurve);
 
-/* ================= AXE TEMPOREL ================= */
+/* ============================================================
+   AXE TEMPOREL
+   ============================================================ */
 function getTimeScale(period) {
   const now = new Date();
 
   if (period === "1h")
     return { min: new Date(now - 3600000), max: now, unit: "minute", display: "HH:mm" };
-
   if (period === "1d")
     return { min: new Date(now - 86400000), max: now, unit: "hour", display: "HH'h'" };
-
   if (period === "7d")
     return { min: new Date(now - 6 * 86400000), max: now, unit: "day", display: "EEE" };
 
   return { min: new Date(now - 29 * 86400000), max: now, unit: "day", display: "dd/MM" };
 }
 
-/* ================= COURBE ================= */
+/* ============================================================
+   COURBE
+   ============================================================ */
+let chart = null;
+
 async function loadCurve() {
   const deviceId = deviceSelect.value;
-  if (!deviceId) {
-    status.textContent = "Aucun module sélectionné.";
-    return;
-  }
+  if (!deviceId) return;
 
   const scale = getTimeScale(periodSelect.value);
   status.textContent = "Chargement...";
@@ -210,7 +217,7 @@ async function loadCurve() {
 
   if (chart) chart.destroy();
 
-  chart = new Chart(chart, {
+  chart = new Chart(document.getElementById("chart"), {
     type: "line",
     data: {
       datasets: [{
@@ -241,10 +248,11 @@ async function loadCurve() {
   });
 
   status.textContent =
-    points.length ? "✅ Courbe affichée" : "⚠️ Aucune donnée sur la période";
+    points.length
+      ? "✅ Courbe affichée"
+      : "⚠️ Aucune donnée sur la période";
 }
 </script>
 
 </body>
 </html>
-``
