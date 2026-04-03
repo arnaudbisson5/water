@@ -223,6 +223,10 @@ function applyTimeScale() {
   const now = new Date();
   let start;
 
+  // Nettoyage préalable (important)
+  chart.options.scales.x.time.unit = undefined;
+  chart.options.scales.x.time.displayFormats = {};
+
   if (scale === "hour") {
     start = new Date(now.getTime() - 60 * 60 * 1000);
   }
@@ -236,6 +240,12 @@ function applyTimeScale() {
     start = new Date(now);
     start.setHours(0, 0, 0, 0);
     start.setDate(start.getDate() - 6);
+
+    // ✅ affichage par JOUR (dates, pas heures)
+    chart.options.scales.x.time.unit = "day";
+    chart.options.scales.x.time.displayFormats = {
+      day: "dd/MM"
+    };
   }
 
   if (scale === "month") {
@@ -244,9 +254,9 @@ function applyTimeScale() {
 
   chart.options.scales.x.min = start;
   chart.options.scales.x.max = now;
+
   chart.update("none");
 }
-
 // --------------------------------------------------
 // COMMANDES
 // --------------------------------------------------
