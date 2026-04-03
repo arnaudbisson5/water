@@ -7,13 +7,11 @@
   <style>
     body { font-family: Arial, sans-serif; margin: 30px; }
     h1, h2 { color: #2c7; }
-
     input, button, select {
       padding: 8px;
       font-size: 15px;
       margin: 6px 0;
     }
-
     #loginBox, #deviceBox {
       border: 1px solid #ccc;
       padding: 15px;
@@ -21,9 +19,16 @@
       max-width: 420px;
       margin-bottom: 20px;
     }
-
     #dashboard { display: none; }
     .status { font-weight: bold; margin-top: 10px; }
+    #debugBadge {
+      background: #f90;
+      color: #000;
+      padding: 4px 8px;
+      font-weight: bold;
+      display: inline-block;
+      margin-bottom: 10px;
+    }
   </style>
 
   <!-- ✅ Chart.js -->
@@ -37,6 +42,8 @@
 <body>
 
 <h1>🌱 Jardin en Eau</h1>
+
+<div id="debugBadge" style="display:none">MODE DEBUG – LOGIN BYPASS</div>
 
 <!-- ================= LOGIN ================= -->
 <div id="loginBox">
@@ -69,13 +76,16 @@
 
   <div id="status" class="status"></div>
 
-  <div style="max-width:900px;margin-top:20px;">
+  <div style="max-width:900px; margin-top:20px;">
     <canvas id="chart"></canvas>
   </div>
 </div>
 
 <script>
-/* ================= CONFIG ================= */
+/* ================= MODE DEBUG ================= */
+const DEBUG_BYPASS_LOGIN = true; // 🔁 mettre false en prod
+
+/* ================= SUPABASE ================= */
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
 
@@ -86,14 +96,25 @@ const supabaseClient = supabase.createClient(
 
 let chart = null;
 
-/* ================= AUTH ================= */
+/* ================= AUTH / UI ================= */
 async function updateUI() {
+
+  if (DEBUG_BYPASS_LOGIN) {
+    debugBadge.style.display = "inline-block";
+    loginBox.style.display = "none";
+    dashboard.style.display = "block";
+    await loadUserDevices();
+    loadCurve();
+    return;
+  }
+
   const { data } = await supabaseClient.auth.getUser();
+  const connected = !!data?.user;
 
-  loginBox.style.display = data?.user ? "none" : "block";
-  dashboard.style.display = data?.user ? "block" : "none";
+  loginBox.style.display = connected ? "none" : "block";
+  dashboard.style.display = connected ? "block" : "none";
 
-  if (data?.user) {
+  if (connected) {
     await loadUserDevices();
     loadCurve();
   }
@@ -109,17 +130,12 @@ async function login() {
 
   loginStatus.textContent = "Envoi du lien...";
 
-  try {
-    const { error } =
-      await supabaseClient.auth.signInWithOtp({ email });
+  const { error } =
+    await supabaseClient.auth.signInWithOtp({ email });
 
-    loginStatus.textContent = error
-      ? "❌ " + error.message
-      : "✅ Lien envoyé par email";
-  } catch (e) {
-    console.error(e);
-    loginStatus.textContent = "❌ Erreur technique";
-  }
+  loginStatus.textContent = error
+    ? "❌ " + error.message
+    : "✅ Lien envoyé";
 }
 
 async function logout() {
@@ -134,11 +150,12 @@ async function loadUserDevices() {
     .select("device_uid");
 
   deviceSelect.innerHTML = "";
+
   data?.forEach(d => {
-    const o = document.createElement("option");
-    o.value = d.device_uid;
-    o.textContent = d.device_uid;
-    deviceSelect.appendChild(o);
+    const opt = document.createElement("option");
+    opt.value = d.device_uid;
+    opt.textContent = d.device_uid;
+    deviceSelect.appendChild(opt);
   });
 }
 
@@ -157,7 +174,6 @@ function getTimeScale(period) {
         unit: "minute",
         display: "HH:mm"
       };
-
     case "1d":
       return {
         min: new Date(now - 24 * 60 * 60 * 1000),
@@ -165,7 +181,6 @@ function getTimeScale(period) {
         unit: "hour",
         display: "HH'h'"
       };
-
     case "7d":
       return {
         min: new Date(now - 6 * 24 * 60 * 60 * 1000),
@@ -173,7 +188,6 @@ function getTimeScale(period) {
         unit: "day",
         display: "EEE"
       };
-
     case "30d":
       return {
         min: new Date(now - 29 * 24 * 60 * 60 * 1000),
@@ -214,7 +228,7 @@ async function loadCurve() {
 
   if (chart) chart.destroy();
 
-  chart = new Chart(chartCanvas, {
+  chart = new Chart(document.getElementById("chart"), {
     type: "line",
     data: {
       datasets: [{
@@ -247,7 +261,7 @@ async function loadCurve() {
 
   status.textContent = points.length
     ? "✅ Courbe affichée"
-    : "⚠️ Aucune donnée sur cette période";
+    : "⚠️ Aucune donnée sur la période";
 }
 </script>
 
