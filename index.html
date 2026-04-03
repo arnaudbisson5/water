@@ -1,216 +1,342 @@
-<!"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo">
 <!DOCTYPE html>
-<html lang="fr">
+<html>
 <head>
 <meta charset="UTF-8" />
-<title>Jardin en Eau ed06</title>
+<title>Plant Curve</title>
 
 <style>
-  body { font-family: Arial; margin: 30px; }
-  h1 { color: #2c7; }
-  input, button, select {
-    padding: 10px;
-    font-size: 16px;
-    margin-top: 10px;
-    margin-right: 5px;
-  }
-  #chartContainer {
-    width: 100%;
-    max-width: 900px;
-    margin-top: 40px;
-    display: none;
-  }
-  #status {
-    margin-top: 20px;
-    font-weight: bold;
-  }
+    body { font-family: Arial; margin: 30px; }
+    h1 { color: #2c7; }
+    input, button, select { padding: 10px; font-size: 16px; margin-top: 10px; margin-right: 5px; }
+    #chartContainer { width: 100%; max-width: 900px; margin-top: 40px; }
+    #status { margin-top:20px;font-weight:bold; }
+
+    /* ✅ Zone login */
+    #loginBox {
+        border: 2px solid #ccc;
+        padding: 20px;
+        max-width: 400px;
+        border-radius: 10px;
+        margin-bottom: 30px;
+    }
+    #dashboard { display:none; }
 </style>
 
+<!-- ✅ Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-</head>
 
+<!-- ✅ Supabase -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+</head>
 <body>
 
-<h1>🌱 Monitoring</h1>
+<h1>🌱 Courbe humidité + seuil + arrosages</h1>
 
-<!-- LOGIN -->
+<!-- ✅ ✅ BLOC DE LOGIN -->
 <div id="loginBox">
-  <input id="emailInput" type="email" placeholder="email@gmail.com" />
-  <br>
-  <button onclick="login()">Recevoir le lien de connexion</button>
+    <h2>Connexion</h2>
+    <p>Entrez votre email pour recevoir un lien ou un code :</p>
+
+    <input id="emailInput" type="email" placeholder="votre.email@example.com" style="width:90%">
+    <button onclick="login()">Se connecter</button>
+
+    <p id="loginStatus" style="margin-top:10px;color:#444;"></p>
 </div>
 
-<!-- APP -->
-<div id="appBox" style="display:none;">
-  <h2>Module</h2>
-  <select id="deviceSelect" onchange="loadCurve()"></select>
+<!-- ✅ ✅ LE DASHBOARD -->
+<div id="dashboard">
 
-  <div id="status"></div>
+<p><strong>Device ID :</strong></p>
+<input id="deviceIdInput" value="B483A21F8A3C" size="20">
 
-  <div id="chartContainer">
+<button onclick="loadCurve()">Afficher la courbe</button>
+<button onclick="sendWaterCommand()" style="background:#4CAF50;color:white;">💧 Arroser maintenant</button>
+<button onclick="deleteEverything()" style="background:#b71c1c;color:white;">🗑️ Effacer toutes les données</button>
+
+<h2>⚙️ Envoyer un seuil (%)</h2>
+<input id="thresholdInput" value="50" size="6">
+<button onclick="sendThreshold()" style="background:#2196F3;color:white;">✅ Enregistrer seuil</button>
+
+<h2>⏱️ Échelle de temps</h2>
+<select id="timeScale" onchange="applyTimeScale()">
+    <option value="hour">Dernière heure</option>
+    <option value="day" selected>Dernier jour</option>
+    <option value="week">Dernière semaine</option>
+    <option value="month">Dernier mois</option>
+</select>
+
+<div id="status"></div>
+
+<div id="chartContainer" style="display:none;">
     <canvas id="chart"></canvas>
-  </div>
-
-  <br>
-  <button onclick="logout()">Déconnexion</button>
 </div>
+
+</div> <!-- /dashboard -->
 
 <script>
 // --------------------------------------------------
-// CONFIG
+// ✅ CONFIG SUPABASE
 // --------------------------------------------------
-const SUPABASE_URL = "https://arnaudbisson5.github.io/";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
+const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
+const SUPABASE_KEY =
+"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
 
-const supabase = window.supabase.createClient(
-  SUPABASE_URL,
-  SUPABASE_ANON_KEY
-);
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-let chart = null;
-
-// --------------------------------------------------
-// AUTH
-// --------------------------------------------------
-async function login() {
-  try {
-    const email = document.getElementById("emailInput").value.trim();
-    if (!email) {
-      alert("Veuillez entrer un email");
-      return;
+// ✅ Afficher le dashboard si l'utilisateur est connecté
+supabaseClient.auth.onAuthStateChange((event, session) => {
+    if (session) {
+        document.getElementById("loginBox").style.display = "none";
+        document.getElementById("dashboard").style.display = "block";
     }
-
-    console.log("Tentative magic link pour :", email);
-
-    const { data, error } = await supabase.auth.signInWithOtp({
-      email: email
-    });
-
-    if (error) {
-      console.error(error);
-      alert("Erreur Supabase : " + error.message);
-      return;
-    }
-
-    alert("✅ Email envoyé. Vérifie ta boîte mail.");
-
-  } catch (e) {
-    console.error("Erreur JS :", e);
-    alert("Erreur JS – voir console");
-  }
-}
-
-async function logout() {
-  await supabase.auth.signOut();
-  location.reload();
-}
-
-supabase.auth.onAuthStateChange((event, session) => {
-  if (event === "SIGNED_IN") initApp();
 });
 
 // --------------------------------------------------
-// INIT APP
+// ✅ LOGIN
 // --------------------------------------------------
-async function initApp() {
-  loginBox.style.display = "none";
-  appBox.style.display = "block";
-  await loadDevices();
-}
+async function login() {
+    const email = document.getElementById("emailInput").value.trim();
+    const text = document.getElementById("loginStatus");
 
-// --------------------------------------------------
-// LOAD DEVICES (selon user_id connecté)
-// --------------------------------------------------
-async function loadDevices() {
-  const { data, error } = await supabase
-    .from("devices")
-    .select("device_uid, name")
-    .order("created_at");
+    if (!email) { text.textContent = "Veuillez entrer un email."; return; }
 
-  if (error || !data.length) {
-    status.textContent = "Aucun module";
-    return;
-  }
+    text.textContent = "⏳ Envoi du lien/code...";
+    
+    const { error } = await supabaseClient.auth.signInWithOtp({ email });
 
-  const select = document.getElementById("deviceSelect");
-  select.innerHTML = "";
-
-  data.forEach(d => {
-    const o = document.createElement("option");
-    o.value = d.device_uid;
-    o.textContent = d.name || d.device_uid;
-    select.appendChild(o);
-  });
-
-  loadCurve();
-}
-
-// --------------------------------------------------
-// LOAD CURVE (module sélectionné)
-// --------------------------------------------------
-async function loadCurve() {
-  const deviceId = deviceSelect.value;
-  if (!deviceId) return;
-
-  status.textContent = "Chargement...";
-  chartContainer.style.display = "block";
-
-  const { data, error } = await supabase
-    .from("mesures")
-    .select("timestamp, humidity, threshold")
-    .eq("device_uid", deviceId)
-    .order("timestamp");
-
-  if (error || !data.length) {
-    status.textContent = "Aucune donnée";
-    return;
-  }
-
-  const humidity = data.map(m => ({
-    x: new Date(m.timestamp),
-    y: m.humidity
-  }));
-
-  const threshold = data.map(m => ({
-    x: new Date(m.timestamp),
-    y: m.threshold
-  }));
-
-  if (chart) chart.destroy();
-
-  chart = new Chart(document.getElementById("chart"), {
-    type: "line",
-    data: {
-      datasets: [
-        {
-          label: "Humidité (%)",
-          data: humidity,
-          borderColor: "#2c7",
-          tension: 0.2
-        },
-        {
-          label: "Seuil (%)",
-          data: threshold,
-          borderColor: "red",
-          pointRadius: 0
-        }
-      ]
-    },
-    options: {
-      parsing: false,
-      responsive: true,
-      scales: {
-        x: { type: "time" },
-        y: { min: 0, max: 100 }
-      }
+    if (error) {
+        text.textContent = "❌ Erreur : " + error.message;
+        return;
     }
-  });
 
-  status.textContent = "✅ Courbe affichée";
+    text.textContent = "✅ Email envoyé ! Vérifiez votre boîte.";
+}
+
+
+
+// ✅ ✅ TON CODE ORIGINAL COMMENCE ICI (inchangé)
+
+let chart = null;
+
+async function loadCurve() {
+
+    const deviceId = document.getElementById("deviceIdInput").value.trim();
+    const status   = document.getElementById("status");
+    const container= document.getElementById("chartContainer");
+
+    status.textContent = "⏳ Chargement...";
+
+    const mesures = await fetch(
+        `${SUPABASE_URL}/rest/v1/mesures?device_id=eq.${deviceId}&order=timestamp.asc`,
+        { headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY } }
+    ).then(r => r.json());
+
+    if (!mesures.length) {
+        status.textContent = "Aucune mesure.";
+        container.style.display = "none";
+        return;
+    }
+
+    const cleaned = mesures.filter(m =>
+        m.timestamp &&
+        typeof m.humidity === "number" &&
+        typeof m.threshold === "number"
+    );
+
+    const humidityPoints = cleaned.map(m => ({
+        x: new Date(m.timestamp),
+        y: m.humidity
+    }));
+
+    const thresholdPoints = cleaned.map(m => ({
+        x: new Date(m.timestamp),
+        y: m.threshold
+    }));
+
+    const actions = await fetch(
+        `${SUPABASE_URL}/rest/v1/actions?device_id=eq.${deviceId}&order=timestamp.asc`,
+        { headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY } }
+    ).then(r => r.json());
+
+    function findClosestHumidity(date) {
+        let best = cleaned[0];
+        let dt   = Math.abs(new Date(best.timestamp) - date);
+        for (let m of cleaned) {
+            let nd = Math.abs(new Date(m.timestamp) - date);
+            if (nd < dt) { best = m; dt = nd; }
+        }
+        return best.humidity;
+    }
+
+    const waterRequests = actions
+        .filter(a => a.action === "water" && !a.processed)
+        .map(a => ({
+            x: new Date(a.timestamp),
+            y: findClosestHumidity(new Date(a.timestamp))
+        }));
+
+    const waterDone = actions
+        .filter(a => a.action === "water" && a.processed)
+        .map(a => ({
+            x: new Date(a.timestamp),
+            y: findClosestHumidity(new Date(a.timestamp))
+        }));
+
+    status.textContent = "✅ Courbe prête";
+    container.style.display = "block";
+
+    if (chart) chart.destroy();
+
+    chart = new Chart(document.getElementById("chart"), {
+        type: 'line',
+        data: {
+            datasets: [
+                {
+                    label: "Humidité (%)",
+                    data: humidityPoints,
+                    borderColor: "#2c7",
+                    backgroundColor: "rgba(44,200,100,0.15)",
+                    borderWidth: 2,
+                    tension: 0.2
+                },
+                {
+                    label: "Seuil (%)",
+                    data: thresholdPoints,
+                    borderColor: "red",
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    tension: 0
+                },
+                {
+                    label: "Demande arrosage",
+                    type: "scatter",
+                    data: waterRequests,
+                    pointBackgroundColor: "orange",
+                    pointRadius: 8
+                },
+                {
+                    label: "Arrosage exécuté",
+                    type: "scatter",
+                    data: waterDone,
+                    pointBackgroundColor: "green",
+                    pointRadius: 8
+                }
+            ]
+        },
+        options: {
+            parsing: false,
+            responsive: true,
+            scales: {
+                x: {
+                    type: "time",
+                    title: { text: "Date / Heure locale", display: true }
+                },
+                y: {
+                    min: 0,
+                    max: 100,
+                    title: { text: "Humidité (%)", display: true }
+                }
+            }
+        }
+    });
+
+    applyTimeScale();
+}
+
+function applyTimeScale() {
+    if (!chart) return;
+
+    const scale = document.getElementById("timeScale").value;
+    const now = new Date();
+    let start;
+
+    switch (scale) {
+        case "hour":  start = new Date(now.getTime() - 1 * 60 * 60 * 1000); break;
+        case "day":   start = new Date(now.getTime() - 24 * 60 * 60 * 1000); break;
+        case "week":  start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); break;
+        case "month": start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); break;
+    }
+
+    chart.options.scales.x.min = start;
+    chart.options.scales.x.max = now;
+    chart.update();
+}
+
+async function sendWaterCommand() {
+    const deviceId = document.getElementById("deviceIdInput").value.trim();
+    const status   = document.getElementById("status");
+
+    await fetch(`${SUPABASE_URL}/rest/v1/actions`, {
+        method: "POST",
+        headers: {
+            "apikey": SUPABASE_KEY,
+            "Authorization": "Bearer " + SUPABASE_KEY,
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
+        },
+        body: JSON.stringify({
+            device_id: deviceId,
+            action: "water",
+            processed: false,
+            timestamp: new Date().toISOString()
+        })
+    });
+
+    status.textContent = "✅ Consigne envoyée !";
+    await new Promise(r => setTimeout(r, 400));
+    loadCurve();
+}
+
+async function sendThreshold() {
+    const deviceId = document.getElementById("deviceIdInput").value.trim();
+    const threshold = parseFloat(document.getElementById("thresholdInput").value.trim());
+    const status   = document.getElementById("status");
+
+    await fetch(`${SUPABASE_URL}/rest/v1.actions`, {
+        method: "POST",
+        headers: {
+            "apikey": SUPABASE_KEY,
+            "Authorization": "Bearer " + SUPABASE_KEY,
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
+        },
+        body: JSON.stringify({
+            device_id: deviceId,
+            action: "set_threshold",
+            threshold: threshold,
+            processed: false,
+            timestamp: new Date().toISOString()
+        })
+    });
+
+    status.textContent = "✅ Seuil enregistré !";
+    await new Promise(r => setTimeout(r, 400));
+    loadCurve();
+}
+
+async function deleteEverything() {
+    const deviceId = document.getElementById("deviceIdInput").value.trim();
+    const status   = document.getElementById("status");
+
+    if (!confirm("⚠️ Effacer TOUTES les mesures + actions ?")) return;
+
+    await fetch(`${SUPABASE_URL}/rest/v1/mesures?device_id=eq.${deviceId}`, {
+        method: "DELETE",
+        headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY }
+    });
+
+    await fetch(`${SUPABASE_URL}/rest/v1/actions?device_id=eq.${deviceId}`, {
+        method: "DELETE",
+        headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY }
+    });
+
+    status.textContent = "✅ Toutes les données ont été supprimées.";
+    loadCurve();
 }
 </script>
 
 </body>
 </html>
+``
