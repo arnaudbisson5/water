@@ -3,11 +3,10 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8" />
-<title>Plant Curve ed01</title>
+<title>Plant Curve ed02</title>
 
 <style>
   body { font-family: Arial; margin: 30px; }
-  
   h1 { color: #2c7; }
   input, button, select {
     padding: 10px;
@@ -75,6 +74,17 @@ const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
 
 let chart = null;
+
+// --------------------------------------------------
+// OUTIL : ARRONDIR À 10 MINUTES
+// --------------------------------------------------
+function floorToTenMinutes(date) {
+  const d = new Date(date);
+  d.setMinutes(Math.floor(d.getMinutes() / 10) * 10);
+  d.setSeconds(0);
+  d.setMilliseconds(0);
+  return d;
+}
 
 // --------------------------------------------------
 // CHARGER LA COURBE
@@ -162,50 +172,18 @@ async function loadCurve() {
     type: "line",
     data: {
       datasets: [
-        {
-          label: "Humidité (%)",
-          data: humidityPoints,
-          borderColor: "#2c7",
-          backgroundColor: "rgba(44,200,100,0.15)",
-          borderWidth: 2,
-          tension: 0.2
-        },
-        {
-          label: "Seuil (%)",
-          data: thresholdPoints,
-          borderColor: "red",
-          borderWidth: 2,
-          pointRadius: 0
-        },
-        {
-          label: "Demande arrosage",
-          type: "scatter",
-          data: waterRequests,
-          pointBackgroundColor: "orange",
-          pointRadius: 8
-        },
-        {
-          label: "Arrosage exécuté",
-          type: "scatter",
-          data: waterDone,
-          pointBackgroundColor: "green",
-          pointRadius: 8
-        }
+        { label: "Humidité (%)", data: humidityPoints, borderColor: "#2c7", tension: 0.2 },
+        { label: "Seuil (%)", data: thresholdPoints, borderColor: "red", pointRadius: 0 },
+        { label: "Demande arrosage", type: "scatter", data: waterRequests, pointBackgroundColor: "orange", pointRadius: 8 },
+        { label: "Arrosage exécuté", type: "scatter", data: waterDone, pointBackgroundColor: "green", pointRadius: 8 }
       ]
     },
     options: {
       parsing: false,
       responsive: true,
       scales: {
-        x: {
-          type: "time",
-          title: { display: true, text: "Date / Heure locale" }
-        },
-        y: {
-          min: 0,
-          max: 100,
-          title: { display: true, text: "Humidité (%)" }
-        }
+        x: { type: "time", title: { display: true, text: "Date / Heure locale" } },
+        y: { min: 0, max: 100 }
       }
     }
   });
@@ -215,51 +193,59 @@ async function loadCurve() {
 }
 
 // --------------------------------------------------
-// ÉCHELLE STRICTE X : now - période -> now
+// ÉCHELLE DE TEMPS (ARRONDI DÉBUT + FIN)
 // --------------------------------------------------
 function applyTimeScale() {
   if (!chart) return;
 
   const scale = document.getElementById("timeScale").value;
   const now = new Date();
-  let start;
 
-  // Nettoyage préalable (important)
+  // reset
   chart.options.scales.x.time.unit = undefined;
   chart.options.scales.x.time.displayFormats = {};
+  chart.options.scales.x.ticks = {};
+
+  let start, end;
 
   if (scale === "hour") {
-    start = new Date(now.getTime() - 60 * 60 * 1000);
+    end = floorToTenMinutes(now);
+    start = floorToTenMinutes(
+      new Date(end.getTime() - 60 * 60 * 1000)
+    );
+
+    chart.options.scales.x.time.unit = "minute";
+    chart.options.scales.x.time.displayFormats = { minute: "HH:mm" };
+    chart.options.scales.x.ticks = { stepSize: 10 };
   }
 
   if (scale === "day") {
+    end = now;
     start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   }
 
   if (scale === "week") {
-    // ✅ début du jour (00:00) il y a 6 jours
+    end = now;
     start = new Date(now);
     start.setHours(0, 0, 0, 0);
     start.setDate(start.getDate() - 6);
 
-    // ✅ affichage par JOUR (dates, pas heures)
     chart.options.scales.x.time.unit = "day";
-    chart.options.scales.x.time.displayFormats = {
-      day: "dd/MM"
-    };
+    chart.options.scales.x.time.displayFormats = { day: "dd/MM" };
   }
 
   if (scale === "month") {
+    end = now;
     start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   }
 
   chart.options.scales.x.min = start;
-  chart.options.scales.x.max = now;
-
+  chart.options.scales.x.max = end;
   chart.update("none");
 }
+
 // --------------------------------------------------
-// COMMANDES
+// COMMANDES (inchangées)
 // --------------------------------------------------
 async function sendWaterCommand() {
   const deviceId = document.getElementById("deviceIdInput").value.trim();
@@ -307,18 +293,12 @@ async function deleteEverything() {
 
   await fetch(`${SUPABASE_URL}/rest/v1/mesures?device_id=eq.${deviceId}`, {
     method: "DELETE",
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: "Bearer " + SUPABASE_KEY
-    }
+    headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY }
   });
 
   await fetch(`${SUPABASE_URL}/rest/v1/actions?device_id=eq.${deviceId}`, {
     method: "DELETE",
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: "Bearer " + SUPABASE_KEY
-    }
+    headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY }
   });
 
   loadCurve();
