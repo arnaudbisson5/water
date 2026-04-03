@@ -41,7 +41,6 @@
 <!-- ================= LOGIN ================= -->
 <div id="loginBox">
   <h2>Connexion</h2>
-  <p>Entrez votre email pour recevoir un lien magique :</p>
   <input id="emailInput" type="email" placeholder="email@example.com">
   <br>
   <button onclick="login()">Recevoir le lien de connexion</button>
@@ -53,21 +52,10 @@
 
   <div id="deviceBox">
     <h2>Modules</h2>
-
-    <label><strong>Module actif :</strong></label><br>
     <select id="deviceSelect"></select>
-
-    <h3>Ajouter un module</h3>
-    <input id="deviceUidInput" placeholder="Device UID (ESP)">
-    <input id="deviceNameInput" placeholder="Nom du module">
-    <br>
-    <button onclick="createDevice()">Créer le module</button>
-    <p id="deviceStatus" class="status"></p>
   </div>
 
-  <h2>Courbe d’humidité</h2>
-
-  <label><strong>Période affichée :</strong></label><br>
+  <label><strong>Période :</strong></label><br>
   <select id="periodSelect">
     <option value="1h">Dernière heure</option>
     <option value="1d" selected>Dernier jour</option>
@@ -77,21 +65,16 @@
 
   <br><br>
   <button onclick="loadCurve()">Afficher la courbe</button>
-  <button onclick="sendWaterCommand()">💧 Arroser maintenant</button>
-  <button onclick="logout()">🚪 Déconnexion</button>
+  <button onclick="logout()">Déconnexion</button>
 
   <div id="status" class="status"></div>
 
-  <div style="max-width: 900px; margin-top: 20px;">
+  <div style="max-width:900px;margin-top:20px;">
     <canvas id="chart"></canvas>
   </div>
 </div>
 
 <script>
-/* ================= DEBUG ================= */
-console.log("Supabase:", typeof supabase);
-console.log("Chart:", typeof Chart);
-
 /* ================= CONFIG ================= */
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
@@ -103,16 +86,14 @@ const supabaseClient = supabase.createClient(
 
 let chart = null;
 
-/* ================= AUTH UI ================= */
+/* ================= AUTH ================= */
 async function updateUI() {
   const { data } = await supabaseClient.auth.getUser();
 
-  if (!data?.user) {
-    loginBox.style.display = "block";
-    dashboard.style.display = "none";
-  } else {
-    loginBox.style.display = "none";
-    dashboard.style.display = "block";
+  loginBox.style.display = data?.user ? "none" : "block";
+  dashboard.style.display = data?.user ? "block" : "none";
+
+  if (data?.user) {
     await loadUserDevices();
     loadCurve();
   }
@@ -134,14 +115,13 @@ async function login() {
 
     loginStatus.textContent = error
       ? "❌ " + error.message
-      : "✅ Lien envoyé, vérifiez vos emails.";
+      : "✅ Lien envoyé par email";
   } catch (e) {
     console.error(e);
     loginStatus.textContent = "❌ Erreur technique";
   }
 }
 
-/* ================= LOGOUT ================= */
 async function logout() {
   await supabaseClient.auth.signOut();
   location.reload();
@@ -149,77 +129,73 @@ async function logout() {
 
 /* ================= MODULES ================= */
 async function loadUserDevices() {
-  const { data, error } = await supabaseClient
+  const { data } = await supabaseClient
     .from("devices")
-    .select("device_uid, name")
-    .order("created_at");
-
-  if (error) return console.error(error);
+    .select("device_uid");
 
   deviceSelect.innerHTML = "";
-  data.forEach(d => {
-    const opt = document.createElement("option");
-    opt.value = d.device_uid;
-    opt.textContent = d.name || d.device_uid;
-    deviceSelect.appendChild(opt);
+  data?.forEach(d => {
+    const o = document.createElement("option");
+    o.value = d.device_uid;
+    o.textContent = d.device_uid;
+    deviceSelect.appendChild(o);
   });
 }
 
 deviceSelect.addEventListener("change", loadCurve);
-
-async function createDevice() {
-  const uid = deviceUidInput.value.trim();
-  const name = deviceNameInput.value.trim();
-  if (!uid || !name) return;
-
-  const { data: user } = await supabaseClient.auth.getUser();
-
-  const { error } = await supabaseClient.from("devices").insert({
-    user_id: user.user.id,
-    device_uid: uid,
-    name: name
-  });
-
-  deviceStatus.textContent = error
-    ? "❌ " + error.message
-    : "✅ Module créé";
-
-  deviceUidInput.value = "";
-  deviceNameInput.value = "";
-  loadUserDevices();
-}
-
-/* ================= PÉRIODE ================= */
-function getStartDate(period) {
-  const now = Date.now();
-  const map = {
-    "1h": 1 * 60 * 60 * 1000,
-    "1d": 24 * 60 * 60 * 1000,
-    "7d": 7 * 24 * 60 * 60 * 1000,
-    "30d": 30 * 24 * 60 * 60 * 1000
-  };
-  return new Date(now - map[period]);
-}
-
 periodSelect.addEventListener("change", loadCurve);
+
+/* ================= AXE TEMPOREL ================= */
+function getTimeScale(period) {
+  const now = new Date();
+
+  switch (period) {
+    case "1h":
+      return {
+        min: new Date(now - 1 * 60 * 60 * 1000),
+        max: now,
+        unit: "minute",
+        display: "HH:mm"
+      };
+
+    case "1d":
+      return {
+        min: new Date(now - 24 * 60 * 60 * 1000),
+        max: now,
+        unit: "hour",
+        display: "HH'h'"
+      };
+
+    case "7d":
+      return {
+        min: new Date(now - 6 * 24 * 60 * 60 * 1000),
+        max: now,
+        unit: "day",
+        display: "EEE"
+      };
+
+    case "30d":
+      return {
+        min: new Date(now - 29 * 24 * 60 * 60 * 1000),
+        max: now,
+        unit: "day",
+        display: "dd/MM"
+      };
+  }
+}
 
 /* ================= COURBE ================= */
 async function loadCurve() {
   const deviceId = deviceSelect.value;
-  const period = periodSelect.value;
+  if (!deviceId) return;
 
-  if (!deviceId) {
-    status.textContent = "Aucun module sélectionné.";
-    return;
-  }
-
+  const scale = getTimeScale(periodSelect.value);
   status.textContent = "Chargement...";
-  const startDate = getStartDate(period);
 
   const url =
     `${SUPABASE_URL}/rest/v1/mesures` +
     `?device_id=eq.${deviceId}` +
-    `&timestamp=gte.${startDate.toISOString()}` +
+    `&timestamp=gte.${scale.min.toISOString()}` +
     `&order=timestamp.asc`;
 
   const res = await fetch(url, {
@@ -229,66 +205,49 @@ async function loadCurve() {
     }
   });
 
-  const data = await res.json();
-  if (!data.length) {
-    status.textContent = "Aucune donnée sur cette période.";
-    if (chart) chart.destroy();
-    return;
-  }
+  const mesures = await res.json();
 
-  const points = data.map(m => ({
+  const points = mesures.map(m => ({
     x: new Date(m.timestamp),
     y: m.humidity
   }));
 
   if (chart) chart.destroy();
 
-  chart = new Chart(
-    document.getElementById("chart"),
-    {
-      type: "line",
-      data: {
-        datasets: [{
-          label: "Humidité (%)",
-          data: points,
-          borderColor: "#2c7",
-          tension: 0.2
-        }]
-      },
-      options: {
-        responsive: true,
-        scales: {
-          x: { type: "time" },
-          y: { min: 0, max: 100 }
-        }
+  chart = new Chart(chartCanvas, {
+    type: "line",
+    data: {
+      datasets: [{
+        label: "Humidité (%)",
+        data: points,
+        borderColor: "#2c7",
+        tension: 0.2,
+        spanGaps: false
+      }]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        x: {
+          type: "time",
+          min: scale.min,
+          max: scale.max,
+          time: {
+            unit: scale.unit,
+            displayFormats: {
+              [scale.unit]: scale.display
+            },
+            tooltipFormat: scale.display
+          }
+        },
+        y: { min: 0, max: 100 }
       }
     }
-  );
-
-  status.textContent = "✅ Courbe affichée";
-}
-
-/* ================= ACTION ================= */
-async function sendWaterCommand() {
-  const deviceId = deviceSelect.value;
-  if (!deviceId) return;
-
-  await fetch(`${SUPABASE_URL}/rest/v1/actions`, {
-    method: "POST",
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: "Bearer " + SUPABASE_KEY,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      device_id: deviceId,
-      action: "water",
-      processed: false,
-      timestamp: new Date().toISOString()
-    })
   });
 
-  loadCurve();
+  status.textContent = points.length
+    ? "✅ Courbe affichée"
+    : "⚠️ Aucune donnée sur cette période";
 }
 </script>
 
