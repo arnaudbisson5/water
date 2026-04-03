@@ -1,137 +1,76 @@
-<"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo">
+<!eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo>
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <title>Jardin en Eau</title>
+  <meta charset="UTF-8" />
+  <title>Mesures – dernière semaine</title>
 
   <style>
     body { font-family: Arial, sans-serif; margin: 30px; }
     h1, h2 { color: #2c7; }
-
-    input, button, select {
+    select, button {
       padding: 8px;
       font-size: 15px;
       margin: 6px 0;
     }
-
-    #loginBox, #deviceBox {
+    #deviceBox {
       border: 1px solid #ccc;
       padding: 15px;
       border-radius: 6px;
       max-width: 420px;
       margin-bottom: 20px;
     }
-
-    #dashboard { display: none; }
     .status { font-weight: bold; margin-top: 10px; }
-    #debugSwitch { margin-bottom: 10px; }
   </style>
 
-  <!-- Librairies -->
+  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
-  https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2
+
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 
 <body>
 
-<h1>🌱 Jardin en Eau</h1>
+<h1>📈 Mesures – dernière semaine</h1>
 
-<div id="loginBox">
-  <div id="debugSwitch">
-    <label>
-      <input type="checkbox" id="debugToggle">
-      Mode debug (bypass magic link)
-    </label>
-  </div>
-
-  <h2>Connexion</h2>
-  <input id="emailInput" type="email" placeholder="email@example.com">
+<div id="deviceBox">
+  <h2>Modules</h2>
+  <select id="deviceSelect"></select>
   <br>
-  <button onclick="login()">Recevoir le lien</button>
-  <p id="loginStatus" class="status"></p>
+  <button onclick="loadCurve()">Afficher la courbe</button>
+  <div id="status" class="status"></div>
 </div>
 
-<div id="dashboard">
-  <div id="deviceBox">
-    <h2>Modules</h2>
-    <select id="deviceSelect"></select>
-  </div>
-
-  <button onclick="loadCurve()">Afficher la courbe (7 jours)</button>
-  <button onclick="logout()">Déconnexion</button>
-
-  <div id="status" class="status"></div>
-
-  <div style="max-width:900px;margin-top:20px">
-    <canvas id="chart"></canvas>
-  </div>
+<div style="max-width:900px">
+  <canvas id="chart"></canvas>
 </div>
 
 <script>
+/* ================= CONFIG ================= */
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
-const SUPABASE_KEY = ""eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo"";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
+const USER_ID = "8aec257d-e395-4463-b828-370704f3d145";
 
-const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabaseClient = supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_KEY
+);
+
 let chart = null;
 
-/* ================= DEBUG ================= */
-function isDebug() {
-  return document.getElementById("debugToggle").checked;
-}
-
-/* ================= UI AUTH ================= */
-async function updateUI() {
-  const { data } = await supabaseClient.auth.getUser();
-  const logged = !!data?.user;
-
-  loginBox.style.display = logged ? "none" : "block";
-  dashboard.style.display = logged ? "block" : "none";
-
-  if (logged) {
-    await loadUserDevices();
-    loadCurve();
-  }
-}
-
-supabaseClient.auth.onAuthStateChange(updateUI);
-updateUI();
-
-/* ================= LOGIN / LOGOUT ================= */
-async function login() {
-  if (isDebug()) {
-    loginBox.style.display = "none";
-    dashboard.style.display = "block";
-    await loadUserDevices();
-    loadCurve();
-    return;
-  }
-
-  const email = emailInput.value.trim();
-  if (!email) return;
-
-  loginStatus.textContent = "Envoi du lien...";
-  const { error } = await supabaseClient.auth.signInWithOtp({ email });
-  loginStatus.textContent = error
-    ? "❌ " + error.message
-    : "✅ Lien envoyé";
-}
-
-async function logout() {
-  await supabaseClient.auth.signOut();
-  location.reload();
-}
-
 /* ================= MODULES ================= */
-async function loadUserDevices() {
+async function loadDevices() {
   const { data, error } = await supabaseClient
     .from("devices")
     .select("device_uid, name")
+    .eq("user_id", USER_ID)
     .order("created_at");
 
   if (error) {
     console.error(error);
+    status.textContent = "❌ Erreur chargement modules";
     return;
   }
 
@@ -144,30 +83,27 @@ async function loadUserDevices() {
   });
 }
 
-deviceSelect.addEventListener("change", loadCurve);
-
-/* ================= COURBE – DERNIÈRE SEMAINE ================= */
+/* ================= COURBE (7 JOURS) ================= */
 async function loadCurve() {
-  const uid = deviceSelect.value;
-  if (!uid) return;
+  const deviceUid = deviceSelect.value;
+  if (!deviceUid) return;
 
-  status.textContent = "Chargement...";
+  status.textContent = "Chargement…";
 
   const since = new Date(
     Date.now() - 7 * 24 * 60 * 60 * 1000
   ).toISOString();
 
-  /* ✅ API Supabase officielle (gère le token utilisateur automatiquement) */
   const { data: mesures, error } = await supabaseClient
     .from("mesures")
     .select("timestamp, humidity")
-    .eq("device_uid", uid)
+    .eq("device_uid", deviceUid)
     .gte("timestamp", since)
     .order("timestamp");
 
   if (error) {
     console.error(error);
-    status.textContent = "❌ Erreur de lecture des données";
+    status.textContent = "❌ Erreur chargement données";
     return;
   }
 
@@ -200,6 +136,9 @@ async function loadCurve() {
   status.textContent =
     points.length ? "✅ Courbe affichée" : "⚠️ Aucune donnée";
 }
+
+/* ================= INIT ================= */
+loadDevices();
 </script>
 
 </body>
