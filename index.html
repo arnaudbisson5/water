@@ -1,5 +1,4 @@
 <!"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo">
-<h1>🚨 TEST 0004 🚨</h1>
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -175,8 +174,7 @@ async function loadCurve() {
           data: thresholdPoints,
           borderColor: "red",
           borderWidth: 2,
-          pointRadius: 0,
-          tension: 0
+          pointRadius: 0
         },
         {
           label: "Demande arrosage",
@@ -200,12 +198,12 @@ async function loadCurve() {
       scales: {
         x: {
           type: "time",
-          title: { text: "Date / Heure locale", display: true }
+          title: { display: true, text: "Date / Heure locale" }
         },
         y: {
           min: 0,
           max: 100,
-          title: { text: "Humidité (%)", display: true }
+          title: { display: true, text: "Humidité (%)" }
         }
       }
     }
@@ -216,7 +214,7 @@ async function loadCurve() {
 }
 
 // --------------------------------------------------
-// CHANGEMENT D’ÉCHELLE X
+// ÉCHELLE STRICTE X : now - période -> now
 // --------------------------------------------------
 function applyTimeScale() {
   if (!chart) return;
@@ -225,24 +223,14 @@ function applyTimeScale() {
   const now = new Date();
   let start;
 
-  switch (scale) {
-    case "hour":
-      start = new Date(now.getTime() - 1 * 60 * 60 * 1000);
-      break;
-    case "day":
-      start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      break;
-    case "week":
-      start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      break;
-    case "month":
-      start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      break;
-  }
+  if (scale === "hour")     start = new Date(now.getTime() - 60 * 60 * 1000);
+  if (scale === "day")      start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  if (scale === "week")     start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  if (scale === "month")    start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
   chart.options.scales.x.min = start;
   chart.options.scales.x.max = now;
-  chart.update();
+  chart.update("none");
 }
 
 // --------------------------------------------------
