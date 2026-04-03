@@ -41,7 +41,6 @@
 <!-- ================= LOGIN ================= -->
 <div id="loginBox">
   <h2>Connexion</h2>
-  <p>Entrez votre email pour recevoir un lien magique :</p>
   <input id="emailInput" type="email" placeholder="email@example.com">
   <br>
   <button onclick="login()">Recevoir le lien de connexion</button>
@@ -53,8 +52,6 @@
 
   <div id="deviceBox">
     <h2>Modules</h2>
-
-    <label><strong>Module actif :</strong></label><br>
     <select id="deviceSelect"></select>
   </div>
 
@@ -68,19 +65,17 @@
 
   <br><br>
   <button onclick="loadCurve()">Afficher la courbe</button>
-  <button onclick="logout()">🚪 Déconnexion</button>
+  <button onclick="logout()">Déconnexion</button>
 
   <div id="status" class="status"></div>
 
-  <div style="max-width: 900px; margin-top: 20px;">
+  <div style="max-width:900px; margin-top:20px;">
     <canvas id="chart"></canvas>
   </div>
 </div>
 
 <script>
-/* ============================================================
-   CONFIG SUPABASE
-============================================================ */
+/* ================= SUPABASE ================= */
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
 
@@ -91,18 +86,15 @@ const supabaseClient = supabase.createClient(
 
 let chart = null;
 
-/* ============================================================
-   AUTH UI
-============================================================ */
+/* ================= AUTH ================= */
 async function updateUI() {
   const { data } = await supabaseClient.auth.getUser();
+  const logged = !!data?.user;
 
-  const isLoggedIn = !!data?.user;
+  loginBox.style.display = logged ? "none" : "block";
+  dashboard.style.display = logged ? "block" : "none";
 
-  loginBox.style.display = isLoggedIn ? "none" : "block";
-  dashboard.style.display = isLoggedIn ? "block" : "none";
-
-  if (isLoggedIn) {
+  if (logged) {
     await loadUserDevices();
     loadCurve();
   }
@@ -111,21 +103,16 @@ async function updateUI() {
 supabaseClient.auth.onAuthStateChange(updateUI);
 updateUI();
 
-/* ============================================================
-   LOGIN / LOGOUT
-============================================================ */
 async function login() {
   const email = emailInput.value.trim();
   if (!email) return;
 
   loginStatus.textContent = "Envoi du lien...";
-
-  const { error } =
-    await supabaseClient.auth.signInWithOtp({ email });
+  const { error } = await supabaseClient.auth.signInWithOtp({ email });
 
   loginStatus.textContent = error
     ? "❌ " + error.message
-    : "✅ Lien envoyé, vérifiez vos emails.";
+    : "✅ Lien envoyé";
 }
 
 async function logout() {
@@ -133,23 +120,15 @@ async function logout() {
   location.reload();
 }
 
-/* ============================================================
-   MODULES
-============================================================ */
+/* ================= MODULES ================= */
 async function loadUserDevices() {
-  const { data, error } = await supabaseClient
+  const { data } = await supabaseClient
     .from("devices")
     .select("device_uid, name")
     .order("created_at");
 
-  if (error) {
-    console.error(error);
-    return;
-  }
-
   deviceSelect.innerHTML = "";
-
-  data.forEach(d => {
+  data?.forEach(d => {
     const opt = document.createElement("option");
     opt.value = d.device_uid;
     opt.textContent = d.name || d.device_uid;
@@ -160,38 +139,30 @@ async function loadUserDevices() {
 deviceSelect.addEventListener("change", loadCurve);
 periodSelect.addEventListener("change", loadCurve);
 
-/* ============================================================
-   AXE TEMPOREL
-============================================================ */
-function getTimeScale(period) {
-  const now = new Date();
-
-  if (period === "1h")
-    return { min: new Date(now - 3600000), max: now, unit: "minute", display: "HH:mm" };
-
-  if (period === "1d")
-    return { min: new Date(now - 86400000), max: now, unit: "hour", display: "HH'h'" };
-
-  if (period === "7d")
-    return { min: new Date(now - 6 * 86400000), max: now, unit: "day", display: "EEE" };
-
-  return { min: new Date(now - 29 * 86400000), max: now, unit: "day", display: "dd/MM" };
+/* ================= PÉRIODE ================= */
+function getStartDate(period) {
+  const now = Date.now();
+  const map = {
+    "1h": 60 * 60 * 1000,
+    "1d": 24 * 60 * 60 * 1000,
+    "7d": 7 * 24 * 60 * 60 * 1000,
+    "30d": 30 * 24 * 60 * 60 * 1000
+  };
+  return new Date(now - map[period]);
 }
 
-/* ============================================================
-   COURBE
-============================================================ */
+/* ================= COURBE ================= */
 async function loadCurve() {
   const deviceId = deviceSelect.value;
   if (!deviceId) return;
 
-  const scale = getTimeScale(periodSelect.value);
+  const start = getStartDate(periodSelect.value);
   status.textContent = "Chargement...";
 
   const url =
     `${SUPABASE_URL}/rest/v1/mesures` +
     `?device_uid=eq.${deviceId}` +
-    `&timestamp=gte.${scale.min.toISOString()}` +
+    `&timestamp=gte.${start.toISOString()}` +
     `&order=timestamp.asc`;
 
   const res = await fetch(url, {
@@ -217,8 +188,7 @@ async function loadCurve() {
         label: "Humidité (%)",
         data: points,
         borderColor: "#2c7",
-        tension: 0.2,
-        spanGaps: false
+        tension: 0.2
       }]
     },
     options: {
@@ -226,13 +196,8 @@ async function loadCurve() {
       scales: {
         x: {
           type: "time",
-          min: scale.min,
-          max: scale.max,
           time: {
-            unit: scale.unit,
-            displayFormats: {
-              [scale.unit]: scale.display
-            }
+            tooltipFormat: "dd/MM HH:mm"
           }
         },
         y: {
@@ -244,9 +209,7 @@ async function loadCurve() {
   });
 
   status.textContent =
-    points.length
-      ? "✅ Courbe affichée"
-      : "⚠️ Aucune donnée sur la période";
+    points.length ? "✅ Courbe affichée" : "⚠️ Aucune donnée";
 }
 </script>
 
