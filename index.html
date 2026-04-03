@@ -246,25 +246,56 @@ async function loadCurve() {
 }
 
 function applyTimeScale() {
-    if (!chart) return;
+  if (!chart) return;
 
-    const scale = document.getElementById("timeScale").value;
-    const now = new Date();
-    let start;
+  const scale = document.getElementById("timeScale").value;
+  const now = new Date();
 
-    switch (scale) {
-        case "hour":  start = new Date(now.getTime() - 1 * 60 * 60 * 1000); break;
-        case "day":   start = new Date(now.getTime() - 24 * 60 * 60 * 1000); break;
-        case "week":  start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); break;
-        case "month": start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); break;
-    }
+  // reset
+  chart.options.scales.x.time.unit = undefined;
+  chart.options.scales.x.time.displayFormats = {};
+  chart.options.scales.x.ticks = {};
 
-    chart.options.scales.x.min = start;
-    chart.options.scales.x.max = now;
-    chart.update();
+  let start, end;
+
+  if (scale === "hour") {
+    end = floorToTenMinutes(now);
+    start = floorToTenMinutes(
+      new Date(end.getTime() - 60 * 60 * 1000)
+    );
+
+    chart.options.scales.x.time.unit = "minute";
+    chart.options.scales.x.time.displayFormats = { minute: "HH:mm" };
+    chart.options.scales.x.ticks = { stepSize: 10 };
+  }
+
+  if (scale === "day") {
+    end = now;
+    start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  }
+
+  if (scale === "week") {
+    end = now;
+    start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - 6);
+
+    chart.options.scales.x.time.unit = "day";
+    chart.options.scales.x.time.displayFormats = { day: "dd/MM" };
+  }
+
+  if (scale === "month") {
+    end = now;
+    start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  }
+
+  chart.options.scales.x.min = start;
+  chart.options.scales.x.max = end;
+  chart.update();
 }
 
-async function sendWaterCommand() {
+    
+    async function sendWaterCommand() {
     const deviceId = document.getElementById("deviceIdInput").value.trim();
     const status   = document.getElementById("status");
 
