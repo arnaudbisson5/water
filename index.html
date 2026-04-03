@@ -129,7 +129,7 @@ async function loadDevices(userId) {
 
   const { data, error } = await supabaseClient
     .from("devices")
-    .select("device_uid, name")
+    .select("device_id, name")
     .eq("user_id", userId)
     .order("created_at");
 
@@ -140,13 +140,13 @@ async function loadDevices(userId) {
 
   data.forEach(d => {
     const opt = document.createElement("option");
-    opt.value = d.device_uid;
-    opt.textContent = d.name || d.device_uid;
+    opt.value = d.device_id;
+    opt.textContent = d.name || d.device_id;
     select.appendChild(opt);
   });
 
   select.onchange = () => loadCurve(select.value);
-  loadCurve(data[0].device_uid);
+  loadCurve(data[0].device_id);
 }
 
 /* ================= LOAD CURVE ================= */
@@ -161,7 +161,7 @@ async function loadCurve(deviceId) {
 const { data: mesures, error } = await supabaseClient
   .from("mesures")
   .select("timestamp, humidity, threshold")
-  .eq("device_uid", deviceId)
+  .eq("device_id", deviceId)
   .order("timestamp");
 
 console.log("deviceId =", deviceId);
