@@ -1,8 +1,9 @@
+<!const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";>
 <!DOCTYPE html>
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Jardin zen Eau</title>
+  <title>Jardin en Eau</title>
 
   <style>
     body { font-family: Arial, sans-serif; margin: 30px; }
@@ -32,37 +33,32 @@
     }
   </style>
 
-  <!-- ✅ SCRIPTS CORRECTS -->
-  <script src="https://cdn/npm/chart.js@4
-  https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns
-  https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2
+  <!-- ✅ SCRIPTS CORRIGÉS -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
 </head>
 
 <body>
 
 <h1>🌱 Jardin en Eau</h1>
 
-<!-- ================= LOGIN ================= -->
 <div id="loginBox">
-
-  <!-- ✅ SWITCH DEBUG (GARANTI VISIBLE) -->
   <div id="debugSwitch">
     <label>
       <input type="checkbox" id="debugToggle">
-      Mode debug (bypass magic link)
+      Mode debug
     </label>
   </div>
 
   <h2>Connexion</h2>
   <input id="emailInput" type="email" placeholder="email@example.com">
   <br>
-  <button onclick="login()">Recevoir le lien de connexion</button>
+  <button onclick="login()">Recevoir le lien</button>
   <p id="loginStatus" class="status"></p>
 </div>
 
-<!-- ================= DASHBOARD ================= -->
 <div id="dashboard">
-
   <div id="deviceBox">
     <h2>Modules</h2>
     <select id="deviceSelect"></select>
@@ -79,9 +75,10 @@
 </div>
 
 <script>
+window.addEventListener("DOMContentLoaded", () => {
+
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
-
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let chart = null;
 
@@ -89,7 +86,7 @@ function isDebug() {
   return document.getElementById("debugToggle").checked;
 }
 
-async function login() {
+window.login = async function() {
   if (isDebug()) {
     loginBox.style.display = "none";
     dashboard.style.display = "block";
@@ -101,12 +98,12 @@ async function login() {
   const email = emailInput.value.trim();
   if (!email) return;
 
-  loginStatus.textContent = "Envoi du lien...";
+  loginStatus.textContent = "Envoi...";
   const { error } = await supabaseClient.auth.signInWithOtp({ email });
   loginStatus.textContent = error ? "❌ " + error.message : "✅ Lien envoyé";
 }
 
-async function logout() {
+window.logout = async function() {
   await supabaseClient.auth.signOut();
   location.reload();
 }
@@ -126,7 +123,7 @@ async function loadUserDevices() {
   });
 }
 
-async function loadCurve() {
+window.loadCurve = async function() {
   const uid = deviceSelect.value;
   if (!uid) return;
 
@@ -145,10 +142,6 @@ async function loadCurve() {
   );
 
   const mesures = await res.json();
-  if (!Array.isArray(mesures)) {
-    status.textContent = "Erreur données";
-    return;
-  }
 
   const points = mesures.map(m => ({
     x: new Date(m.timestamp),
@@ -177,6 +170,8 @@ async function loadCurve() {
 
   status.textContent = "✅";
 }
+
+});
 </script>
 
 </body>
