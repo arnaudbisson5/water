@@ -24,19 +24,28 @@
 
     #dashboard { display: none; }
     .status { font-weight: bold; margin-top: 10px; }
-    #debugSwitch { margin-bottom: 10px; }
+
+    #debugSwitch {
+      margin-bottom: 12px;
+      padding: 6px;
+      border: 1px dashed #aaa;
+    }
   </style>
 
-  <!-- ✅ Scripts corrects -->
-https://cdn.jsdelivr.net/npm/chart.js@4
-<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2dy>
+  <!-- ✅ SCRIPTS CORRECTS -->
+  <script src="https://cdn/npm/chart.js@4
+  https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns
+  https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2
+</head>
+
+<body>
 
 <h1>🌱 Jardin en Eau</h1>
 
 <!-- ================= LOGIN ================= -->
 <div id="loginBox">
 
-  <!-- ✅ SWITCH DEBUG (VISIBLE ICI) -->
+  <!-- ✅ SWITCH DEBUG (GARANTI VISIBLE) -->
   <div id="debugSwitch">
     <label>
       <input type="checkbox" id="debugToggle">
@@ -70,19 +79,16 @@ https://cdn.jsdelivr.net/npm/chart.js@4
 </div>
 
 <script>
-/* ================= CONFIG ================= */
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let chart = null;
 
-/* ================= DEBUG ================= */
 function isDebug() {
   return document.getElementById("debugToggle").checked;
 }
 
-/* ================= LOGIN ================= */
 async function login() {
   if (isDebug()) {
     loginBox.style.display = "none";
@@ -95,7 +101,7 @@ async function login() {
   const email = emailInput.value.trim();
   if (!email) return;
 
-  loginStatus.textContent = "Envoi du lien…";
+  loginStatus.textContent = "Envoi du lien...";
   const { error } = await supabaseClient.auth.signInWithOtp({ email });
   loginStatus.textContent = error ? "❌ " + error.message : "✅ Lien envoyé";
 }
@@ -105,17 +111,14 @@ async function logout() {
   location.reload();
 }
 
-/* ================= MODULES ================= */
 async function loadUserDevices() {
-  const { data, error } = await supabaseClient
+  const { data } = await supabaseClient
     .from("devices")
     .select("device_uid, name")
     .order("created_at");
 
-  if (error) return console.error(error);
-
   deviceSelect.innerHTML = "";
-  data.forEach(d => {
+  data?.forEach(d => {
     const o = document.createElement("option");
     o.value = d.device_uid;
     o.textContent = d.name || d.device_uid;
@@ -123,12 +126,11 @@ async function loadUserDevices() {
   });
 }
 
-/* ================= COURBE (7 JOURS) ================= */
 async function loadCurve() {
   const uid = deviceSelect.value;
   if (!uid) return;
 
-  status.textContent = "Chargement…";
+  status.textContent = "Chargement...";
 
   const since = new Date(Date.now() - 7*24*60*60*1000).toISOString();
 
@@ -143,7 +145,10 @@ async function loadCurve() {
   );
 
   const mesures = await res.json();
-  if (!Array.isArray(mesures)) return status.textContent = "❌ Erreur";
+  if (!Array.isArray(mesures)) {
+    status.textContent = "Erreur données";
+    return;
+  }
 
   const points = mesures.map(m => ({
     x: new Date(m.timestamp),
@@ -156,14 +161,13 @@ async function loadCurve() {
     type: "line",
     data: {
       datasets: [{
-        label: "Humidité (%) – 7 jours",
+        label: "Humidité – 7 jours",
         data: points,
         borderColor: "#2c7",
         tension: 0.2
       }]
     },
     options: {
-      responsive: true,
       scales: {
         x: { type: "time" },
         y: { min: 0, max: 100 }
