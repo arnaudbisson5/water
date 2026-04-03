@@ -1,313 +1,272 @@
+<!"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo">
+
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8" />
-<title>Plant Curve</title>
+  <meta charset="UTF-8">
+  <title>Jardin en Eau</title>
 
-<style>
-    body { font-family: Arial; margin: 30px; }
-    h1 { color: #2c7; }
+  <style>
+    body { font-family: Arial, sans-serif; margin: 30px; }
+    h1, h2 { color: #2c7; }
+
     input, button, select {
-        padding: 10px;
-        font-size: 16px;
-        margin-top: 10px;
-        margin-right: 5px;
+      padding: 8px;
+      font-size: 15px;
+      margin: 6px 0;
     }
-    #chartContainer {
-        width: 100%;
-        max-width: 900px;
-        margin-top: 40px;
-    }
-    #status {
-        margin-top: 20px;
-        font-weight: bold;
-    }
-</style>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    #loginBox, #deviceBox {
+      border: 1px solid #ccc;
+      padding: 15px;
+      border-radius: 6px;
+      max-width: 420px;
+      margin-bottom: 20px;
+    }
 
+    #dashboard { display: none; }
+    .status { font-weight: bold; margin-top: 10px; }
+  </style>
+
+  <!-- Chart.js -->
+  https://cdn.jsdelivr.net/npm/chart.js
+  https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns
+
+  <!-- Supabase -->
+  https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2
 </head>
 <body>
 
-<h1>🌱 Courbe humidité + seuil + arrosages</h1>
+<h1>🌱 Jardin en Eau</h1>
 
-<!-- ✅ USER -->
-<p><strong>User ID :</strong></p>
-<input id="userIdInput"
-       value="8aec257d-e395-4463-b828-370704f3d145"
-       size="38">
-<button onclick="loadDevices()">🔄 Charger modules</button>
+<!-- ================= LOGIN ================= -->
+<div id="loginBox">
+  <h2>Connexion</h2>
+  <p>Entrez votre email pour recevoir un lien magique :</p>
+  <input id="emailInput" type="email" placeholder="email@example.com">
+  <br>
+  <button onclick="login()">Recevoir le lien de connexion</button>
+  <p id="loginStatus" class="status"></p>
+</div>
 
-<!-- ✅ MODULES -->
-<p><strong>Module :</strong></p>
-<select id="deviceSelect"></select>
+<!-- ================= DASHBOARD ================= -->
+<div id="dashboard">
 
-<br>
+  <!-- ===== MODULES ===== -->
+  <div id="deviceBox">
+    <h2>Modules</h2>
 
-<button onclick="loadCurve()">Afficher la courbe</button>
-<button onclick="sendWaterCommand()" style="background:#4CAF50;color:white;">💧 Arroser maintenant</button>
-<button onclick="deleteEverything()" style="background:#b71c1c;color:white;">🗑️ Effacer toutes les données</button>
+    <label for="deviceSelect"><strong>Module actif :</strong></label><br>
+    <select id="deviceSelect"></select>
 
-<h2>⚙️ Envoyer un seuil (%)</h2>
-<input id="thresholdInput" value="50" size="6">
-<button onclick="sendThreshold()" style="background:#2196F3;color:white;">✅ Enregistrer seuil</button>
+    <h3>Ajouter un module</h3>
+    <input id="deviceUidInput" placeholder="Device UID (ESP)">
+    <input id="deviceNameInput" placeholder="Nom du module">
+    <br>
+    <button onclick="createDevice()">Créer le module</button>
+    <p id="deviceStatus" class="status"></p>
+  </div>
 
-<h2>⏱️ Échelle de temps</h2>
-<select id="timeScale" onchange="applyTimeScale()">
-    <option value="hour">Dernière heure</option>
-    <option value="day" selected>Dernier jour</option>
-    <option value="week">Dernière semaine</option>
-    <option value="month">Dernier mois</option>
-</select>
+  <!-- ===== COURBE ===== -->
+  <h2>Courbe humidité</h2>
+  <button onclick="loadCurve()">Afficher la courbe</button>
+  <button onclick="sendWaterCommand()">💧 Arroser maintenant</button>
+  <button onclick="logout()">🚪 Déconnexion</button>
 
-<div id="status"></div>
+  <div id="status" class="status"></div>
 
-<div id="chartContainer" style="display:none;">
+  <div style="max-width: 900px; margin-top: 20px;">
     <canvas id="chart"></canvas>
+  </div>
 </div>
 
 <script>
-// --------------------------------------------------
-// CONFIG
-// --------------------------------------------------
+/* ============================================================
+   CONFIG SUPABASE
+============================================================ */
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
 
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let chart = null;
 
-// --------------------------------------------------
-// ✅ RÉCUPÉRER LE DEVICE SÉLECTIONNÉ
-// --------------------------------------------------
-function getSelectedDeviceId() {
-    return document.getElementById("deviceSelect").value;
+/* ============================================================
+   AUTH UI (✅ UNIQUEMENT AUTH)
+============================================================ */
+async function updateUI() {
+  const { data } = await supabaseClient.auth.getUser();
+
+  if (!data?.user) {
+    loginBox.style.display = "block";
+    dashboard.style.display = "none";
+  } else {
+    loginBox.style.display = "none";
+    dashboard.style.display = "block";
+
+    await loadUserDevices();   // charge les modules
+    loadCurve();               // affiche la courbe du module actif
+  }
 }
 
-// --------------------------------------------------
-// ✅ CHARGER LES MODULES DE L’UTILISATEUR
-// --------------------------------------------------
-async function loadDevices() {
-    const userId = document.getElementById("userIdInput").value.trim();
-    const select = document.getElementById("deviceSelect");
-    const status = document.getElementById("status");
+supabaseClient.auth.onAuthStateChange(updateUI);
 
-    select.innerHTML = "";
-    status.textContent = "⏳ Chargement des modules…";
+/* ============================================================
+   LOGIN
+============================================================ */
+async function login() {
+  const email = emailInput.value.trim();
+  if (!email) return;
 
-    const url =
-        `${SUPABASE_URL}/rest/v1/devices` +
-        `?user_id=eq.${encodeURIComponent(userId)}` +
-        `&order=created_at.asc`;
+  loginStatus.textContent = "Envoi du lien...";
+  const { error } = await supabaseClient.auth.signInWithOtp({ email });
 
-    const devices = await fetch(url, {
-        headers: {
-            apikey: SUPABASE_KEY,
-            Authorization: "Bearer " + SUPABASE_KEY
-        }
-    }).then(r => r.json());
-
-    console.log("Devices trouvés :", devices);
-
-    if (!Array.isArray(devices) || devices.length === 0) {
-        status.textContent = "❌ Aucun module pour cet utilisateur";
-        return;
-    }
-
-    devices.forEach(d => {
-        const o = document.createElement("option");
-        o.value = d.device_uid;          // ou d.device_id selon ta table
-        o.textContent = d.name || d.device_uid;
-        select.appendChild(o);
-    });
-
-    status.textContent = "✅ Modules chargés";
+  loginStatus.textContent = error
+    ? "Erreur : " + error.message
+    : "Lien envoyé, vérifiez vos emails.";
 }
 
-// --------------------------------------------------
-// ✅ CHARGER LA COURBE (inchangé, deviceId automatique)
-// --------------------------------------------------
+/* ============================================================
+   LOGOUT
+============================================================ */
+async function logout() {
+  await supabaseClient.auth.signOut();
+  location.reload();
+}
+
+/* ============================================================
+   MODULES
+============================================================ */
+async function loadUserDevices() {
+  const { data: devices, error } = await supabaseClient
+    .from("devices")
+    .select("device_uid, name")
+    .order("created_at");
+
+  if (error) {
+    console.error(error);
+    return;
+  }
+
+  deviceSelect.innerHTML = "";
+
+  devices.forEach(d => {
+    const opt = document.createElement("option");
+    opt.value = d.device_uid;
+    opt.textContent = d.name || d.device_uid;
+    deviceSelect.appendChild(opt);
+  });
+}
+
+/* ✅ Mise à jour automatique quand on change de module */
+deviceSelect.addEventListener("change", () => {
+  loadCurve();
+});
+
+async function createDevice() {
+  const uid = deviceUidInput.value.trim();
+  const name = deviceNameInput.value.trim();
+  if (!uid || !name) return;
+
+  const { data } = await supabaseClient.auth.getUser();
+
+  const { error } = await supabaseClient.from("devices").insert({
+    user_id: data.user.id,
+    device_uid: uid,
+    name: name
+  });
+
+  deviceStatus.textContent = error
+    ? "Erreur : " + error.message
+    : "Module créé ✅";
+
+  deviceUidInput.value = "";
+  deviceNameInput.value = "";
+  await loadUserDevices();
+  loadCurve();
+}
+
+/* ============================================================
+   COURBE
+============================================================ */
 async function loadCurve() {
+  const deviceId = deviceSelect.value;
+  status.textContent = "⏳ Chargement...";
 
-    const deviceId = getSelectedDeviceId();
-    const status   = document.getElementById("status");
-    const container= document.getElementById("chartContainer");
+  if (!deviceId) {
+    status.textContent = "Aucun module sélectionné.";
+    return;
+  }
 
-    if (!deviceId) {
-        status.textContent = "❌ Aucun module sélectionné";
-        return;
+  const mesures = await fetch(
+    `${SUPABASE_URL}/rest/v1/mesures?device_id=eq.${deviceId}&order=timestamp.asc`,
+    {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: "Bearer " + SUPABASE_KEY
+      }
     }
+  ).then(r => r.json());
 
-    status.textContent = "⏳ Chargement…";
-
-    const mesures = await fetch(
-        `${SUPABASE_URL}/rest/v1/mesures?device_id=eq.${deviceId}&order=timestamp.asc`,
-        {
-            headers: {
-                apikey: SUPABASE_KEY,
-                Authorization: "Bearer " + SUPABASE_KEY
-            }
-        }
-    ).then(r => r.json());
-
-    if (!mesures.length) {
-        status.textContent = "Aucune mesure.";
-        container.style.display = "none";
-        return;
-    }
-
-    const cleaned = mesures.filter(m =>
-        m.timestamp &&
-        typeof m.humidity === "number" &&
-        typeof m.threshold === "number"
-    );
-
-    const humidityPoints = cleaned.map(m => ({
-        x: new Date(m.timestamp),
-        y: m.humidity
-    }));
-
-    const thresholdPoints = cleaned.map(m => ({
-        x: new Date(m.timestamp),
-        y: m.threshold
-    }));
-
-    const actions = await fetch(
-        `${SUPABASE_URL}/rest/v1/actions?device_id=eq.${deviceId}&order=timestamp.asc`,
-        {
-            headers: {
-                apikey: SUPABASE_KEY,
-                Authorization: "Bearer " + SUPABASE_KEY
-            }
-        }
-    ).then(r => r.json());
-
-    function findClosestHumidity(date) {
-        let best = cleaned[0];
-        let dt = Math.abs(new Date(best.timestamp) - date);
-        for (let m of cleaned) {
-            let nd = Math.abs(new Date(m.timestamp) - date);
-            if (nd < dt) { best = m; dt = nd; }
-        }
-        return best.humidity;
-    }
-
-    const waterRequests = actions
-        .filter(a => a.action === "water" && !a.processed)
-        .map(a => ({
-            x: new Date(a.timestamp),
-            y: findClosestHumidity(new Date(a.timestamp))
-        }));
-
-    const waterDone = actions
-        .filter(a => a.action === "water" && a.processed)
-        .map(a => ({
-            x: new Date(a.timestamp),
-            y: findClosestHumidity(new Date(a.timestamp))
-        }));
-
+  if (!mesures.length) {
+    status.textContent =
+      "⚠️ Aucune donnée pour ce module.\n" +
+      "Vérifiez qu’un ESP envoie bien des mesures.";
     if (chart) chart.destroy();
-    container.style.display = "block";
+    return;
+  }
 
-    chart = new Chart(document.getElementById("chart"), {
-        type: "line",
-        data: {
-            datasets: [
-                { label: "Humidité (%)", data: humidityPoints, borderColor: "#2c7", tension: 0.2 },
-                { label: "Seuil (%)", data: thresholdPoints, borderColor: "red", pointRadius: 0 },
-                { label: "Demande arrosage", type: "scatter", data: waterRequests, pointBackgroundColor: "orange", pointRadius: 8 },
-                { label: "Arrosage exécuté", type: "scatter", data: waterDone, pointBackgroundColor: "green", pointRadius: 8 }
-            ]
-        },
-        options: {
-            parsing: false,
-            responsive: true,
-            scales: {
-                x: { type: "time" },
-                y: { min: 0, max: 100 }
-            }
-        }
-    });
+  const points = mesures.map(m => ({
+    x: new Date(m.timestamp),
+    y: m.humidity
+  }));
 
-    status.textContent = "✅ Courbe prête";
-    applyTimeScale();
-}
+  if (chart) chart.destroy();
 
-// --------------------------------------------------
-// ✅ ÉCHELLE (inchangée)
-// --------------------------------------------------
-function applyTimeScale() {
-    if (!chart) return;
-    const scale = document.getElementById("timeScale").value;
-    const now = new Date();
-    let start;
-
-    switch (scale) {
-        case "hour": start = new Date(now - 1 * 3600000); break;
-        case "day": start = new Date(now - 24 * 3600000); break;
-        case "week": start = new Date(now - 7 * 24 * 3600000); break;
-        case "month": start = new Date(now - 30 * 24 * 3600000); break;
+  chart = new Chart(chartCanvas, {
+    type: "line",
+    data: {
+      datasets: [{
+        label: "Humidité (%)",
+        data: points,
+        borderColor: "#2c7",
+        tension: 0.2
+      }]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        x: { type: "time" },
+        y: { min: 0, max: 100 }
+      }
     }
+  });
 
-    chart.options.scales.x.min = start;
-    chart.options.scales.x.max = now;
-    chart.update();
+  status.textContent = "✅ Courbe affichée";
 }
 
-// --------------------------------------------------
-// ✅ COMMANDES (inchangées)
-// --------------------------------------------------
+/* ============================================================
+   ACTION ARROSAGE
+============================================================ */
 async function sendWaterCommand() {
-    const deviceId = getSelectedDeviceId();
-    await fetch(`${SUPABASE_URL}/rest/v1/actions`, {
-        method: "POST",
-        headers: {
-            apikey: SUPABASE_KEY,
-            Authorization: "Bearer " + SUPABASE_KEY,
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            device_id: deviceId,
-            action: "water",
-            processed: false,
-            timestamp: new Date().toISOString()
-        })
-    });
-    loadCurve();
-}
+  const deviceId = deviceSelect.value;
+  if (!deviceId) return;
 
-async function sendThreshold() {
-    const deviceId = getSelectedDeviceId();
-    const threshold = parseFloat(document.getElementById("thresholdInput").value);
-    await fetch(`${SUPABASE_URL}/rest/v1/actions`, {
-        method: "POST",
-        headers: {
-            apikey: SUPABASE_KEY,
-            Authorization: "Bearer " + SUPABASE_KEY,
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            device_id: deviceId,
-            action: "set_threshold",
-            threshold,
-            processed: false,
-            timestamp: new Date().toISOString()
-        })
-    });
-    loadCurve();
-}
+  await fetch(`${SUPABASE_URL}/rest/v1/actions`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: "Bearer " + SUPABASE_KEY,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      device_id: deviceId,
+      action: "water",
+      processed: false,
+      timestamp: new Date().toISOString()
+    })
+  });
 
-async function deleteEverything() {
-    const deviceId = getSelectedDeviceId();
-    if (!confirm("Effacer toutes les données ?")) return;
-    await fetch(`${SUPABASE_URL}/rest/v1/mesures?device_id=eq.${deviceId}`, {
-        method: "DELETE",
-        headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY }
-    });
-    await fetch(`${SUPABASE_URL}/rest/v1/actions?device_id=eq.${deviceId}`, {
-        method: "DELETE",
-        headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY }
-    });
-    loadCurve();
+  loadCurve();
 }
 </script>
 
