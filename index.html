@@ -57,13 +57,11 @@
   <p><strong>Module :</strong></p>
   <select id="deviceSelect"></select>
 
-  <!-- ✅ AJOUT MINIMAL : création de module -->
+  <!-- ✅ CRÉATION DE MODULE AVEC DEVICE_ID -->
   <div style="margin-top:10px;">
-    <input
-      id="newDeviceName"
-      placeholder="Nom du nouveau module"
-      style="width:220px"
-    >
+    <input id="newDeviceId" placeholder="Device ID (ex: ESP32_SALON)" style="width:220px">
+    <br>
+    <input id="newDeviceName" placeholder="Nom du module" style="width:220px">
     <button onclick="createDevice()">➕ Créer</button>
   </div>
 
@@ -101,14 +99,10 @@ let currentUser = null;
 /* ================= LOGIN ================= */
 async function login() {
   const email = emailInput.value.trim();
-  const status = loginStatus;
-  if (!email) { status.textContent = "Email requis"; return; }
+  if (!email) return;
 
   const { error } = await supabaseClient.auth.signInWithOtp({ email });
-
-  status.textContent = error
-    ? "❌ " + error.message
-    : "✅ Lien envoyé par email";
+  loginStatus.textContent = error ? error.message : "✅ Email envoyé";
 }
 
 async function logout() {
@@ -116,13 +110,24 @@ async function logout() {
   location.reload();
 }
 
+/* ================= SESSION AU CHARGEMENT ================= */
+(async () => {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (session) {
+    currentUser = session.user;
+    loginBox.style.display = "none";
+    dashboard.style.display = "block";
+    loadDevices(currentUser.id);
+  }
+})();
+
 /* ================= AUTH LISTENER ================= */
-supabaseClient.auth.onAuthStateChange(async (event, session) => {
+supabaseClient.auth.onAuthStateChange((event, session) => {
   if (event === "SIGNED_IN" && session) {
     currentUser = session.user;
     loginBox.style.display = "none";
     dashboard.style.display = "block";
-    await loadDevices(currentUser.id);
+    loadDevices(currentUser.id);
   }
 });
 
@@ -136,7 +141,7 @@ async function loadDevices(userId) {
     .eq("user_id", userId)
     .order("created_at");
 
-  if (error || !data || data.length === 0) {
+  if (error || !data.length) {
     status.textContent = "Aucun module";
     return;
   }
@@ -149,20 +154,19 @@ async function loadDevices(userId) {
   });
 
   deviceSelect.onchange = () => loadCurve(deviceSelect.value);
-
   deviceSelect.value = data[0].device_id;
   loadCurve(data[0].device_id);
 }
 
 /* ================= ✅ CRÉATION DE MODULE ================= */
 async function createDevice() {
+  const deviceId = newDeviceId.value.trim();
   const name = newDeviceName.value.trim();
-  if (!name) {
-    alert("Veuillez saisir un nom de module");
+
+  if (!deviceId || !name) {
+    alert("Veuillez saisir un device_id et un nom");
     return;
   }
-
-  const deviceId = crypto.randomUUID();
 
   const { error } = await supabaseClient
     .from("devices")
@@ -177,9 +181,10 @@ async function createDevice() {
     return;
   }
 
+  newDeviceId.value = "";
   newDeviceName.value = "";
-  await loadDevices(currentUser.id);
 
+  await loadDevices(currentUser.id);
   deviceSelect.value = deviceId;
   loadCurve(deviceId);
 }
