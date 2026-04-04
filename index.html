@@ -28,16 +28,13 @@
     margin-bottom: 30px;
   }
   #dashboard { display:none; }
-  #createBox {
-    margin-top: 20px;
-    padding: 15px;
-    border: 1px dashed #aaa;
-    max-width: 400px;
-  }
 </style>
 
+<!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+
+<!-- Supabase -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 
@@ -60,11 +57,14 @@
   <p><strong>Module :</strong></p>
   <select id="deviceSelect"></select>
 
-  <!-- ✅ CRÉATION DE MODULE -->
-  <div id="createBox">
-    <h3>➕ Nouveau module</h3>
-    <input id="newDeviceName" placeholder="Nom du module">
-    <button onclick="createDevice()">Créer</button>
+  <!-- ✅ AJOUT MINIMAL : création de module -->
+  <div style="margin-top:10px;">
+    <input
+      id="newDeviceName"
+      placeholder="Nom du nouveau module"
+      style="width:220px"
+    >
+    <button onclick="createDevice()">➕ Créer</button>
   </div>
 
   <h2>⏱️ Échelle de temps</h2>
@@ -95,15 +95,20 @@ const supabaseClient = supabase.createClient(
   SUPABASE_KEY
 );
 
-let currentUser = null;
 let chart = null;
+let currentUser = null;
 
 /* ================= LOGIN ================= */
 async function login() {
   const email = emailInput.value.trim();
-  if (!email) return;
+  const status = loginStatus;
+  if (!email) { status.textContent = "Email requis"; return; }
+
   const { error } = await supabaseClient.auth.signInWithOtp({ email });
-  loginStatus.textContent = error ? error.message : "✅ Email envoyé";
+
+  status.textContent = error
+    ? "❌ " + error.message
+    : "✅ Lien envoyé par email";
 }
 
 async function logout() {
@@ -111,27 +116,27 @@ async function logout() {
   location.reload();
 }
 
-/* ================= AUTH ================= */
-supabaseClient.auth.onAuthStateChange((event, session) => {
-  if (event === "SIGNED_IN") {
+/* ================= AUTH LISTENER ================= */
+supabaseClient.auth.onAuthStateChange(async (event, session) => {
+  if (event === "SIGNED_IN" && session) {
     currentUser = session.user;
     loginBox.style.display = "none";
     dashboard.style.display = "block";
-    loadDevices();
+    await loadDevices(currentUser.id);
   }
 });
 
-/* ================= LOAD DEVICES ================= */
-async function loadDevices(selectId = null) {
+/* ================= CHARGER MODULES ================= */
+async function loadDevices(userId) {
+  deviceSelect.innerHTML = "";
+
   const { data, error } = await supabaseClient
     .from("devices")
     .select("device_id, name")
-    .eq("user_id", currentUser.id)
+    .eq("user_id", userId)
     .order("created_at");
 
-  deviceSelect.innerHTML = "";
-
-  if (error || !data.length) {
+  if (error || !data || data.length === 0) {
     status.textContent = "Aucun module";
     return;
   }
@@ -145,15 +150,17 @@ async function loadDevices(selectId = null) {
 
   deviceSelect.onchange = () => loadCurve(deviceSelect.value);
 
-  const selected = selectId || data[0].device_id;
-  deviceSelect.value = selected;
-  loadCurve(selected);
+  deviceSelect.value = data[0].device_id;
+  loadCurve(data[0].device_id);
 }
 
-/* ================= CREATE DEVICE ================= */
+/* ================= ✅ CRÉATION DE MODULE ================= */
 async function createDevice() {
   const name = newDeviceName.value.trim();
-  if (!name) { alert("Nom requis"); return; }
+  if (!name) {
+    alert("Veuillez saisir un nom de module");
+    return;
+  }
 
   const deviceId = crypto.randomUUID();
 
@@ -166,42 +173,45 @@ async function createDevice() {
     });
 
   if (error) {
-    alert("Erreur création : " + error.message);
+    alert("Erreur création module : " + error.message);
     return;
   }
 
   newDeviceName.value = "";
-  await loadDevices(deviceId);
+  await loadDevices(currentUser.id);
+
+  deviceSelect.value = deviceId;
+  loadCurve(deviceId);
 }
 
-/* ================= LOAD CURVE ================= */
+/* ================= COURBE ================= */
 async function loadCurve(deviceId) {
+  status.textContent = "⏳ Chargement...";
+  chartContainer.style.display = "block";
+
   const { data: mesures, error } = await supabaseClient
     .from("mesures")
     .select("timestamp, humidity, threshold")
     .eq("device_id", deviceId)
     .order("timestamp");
 
-  if (error || !mesures.length) {
-    status.textContent = "Aucune donnée";
+  if (error || !mesures || mesures.length === 0) {
+    status.textContent = "⚠️ Aucune donnée pour ce module";
     chartContainer.style.display = "none";
     return;
   }
-
-  chartContainer.style.display = "block";
-  status.textContent = "✅ Courbe affichée";
 
   const h = mesures.map(m => ({ x: new Date(m.timestamp), y: m.humidity }));
   const t = mesures.map(m => ({ x: new Date(m.timestamp), y: m.threshold }));
 
   if (chart) chart.destroy();
 
-  chart = new Chart(chartCanvas, {
+  chart = new Chart(document.getElementById("chart"), {
     type: "line",
     data: {
       datasets: [
-        { label: "Humidité", data: h, borderColor: "#2c7", tension: 0.2 },
-        { label: "Seuil", data: t, borderColor: "red", pointRadius: 0 }
+        { label: "Humidité (%)", data: h, borderColor: "#2c7", tension: 0.2 },
+        { label: "Seuil (%)", data: t, borderColor: "red", pointRadius: 0 }
       ]
     },
     options: {
@@ -215,20 +225,25 @@ async function loadCurve(deviceId) {
   });
 
   applyTimeScale();
+  status.textContent = "✅ Courbe affichée";
 }
 
 /* ================= TIME SCALE ================= */
 function floorToTenMinutes(d) {
   const x = new Date(d);
-  x.setMinutes(Math.floor(x.getMinutes()/10)*10, 0, 0);
+  x.setMinutes(Math.floor(x.getMinutes() / 10) * 10, 0, 0);
   return x;
 }
 
 function applyTimeScale() {
   if (!chart) return;
+
   const scale = timeScale.value;
   const now = new Date();
   let start, end = now;
+
+  chart.options.scales.x.time.unit = undefined;
+  chart.options.scales.x.ticks = {};
 
   if (scale === "hour") {
     end = floorToTenMinutes(now);
@@ -240,10 +255,10 @@ function applyTimeScale() {
   if (scale === "week") {
     start = new Date(now);
     start.setDate(start.getDate() - 6);
-    start.setHours(0,0,0,0);
+    start.setHours(0, 0, 0, 0);
     chart.options.scales.x.time.unit = "day";
   }
-  if (scale === "month") start = new Date(now - 30*86400000);
+  if (scale === "month") start = new Date(now - 30 * 86400000);
 
   chart.options.scales.x.min = start;
   chart.options.scales.x.max = end;
