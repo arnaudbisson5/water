@@ -19,10 +19,7 @@
     margin-top: 40px;
     display: none;
   }
-  #status {
-    margin-top: 20px;
-    font-weight: bold;
-  }
+  #status { margin-top: 20px; font-weight: bold; }
   #loginBox {
     border: 2px solid #ccc;
     padding: 20px;
@@ -31,13 +28,16 @@
     margin-bottom: 30px;
   }
   #dashboard { display:none; }
+  #createBox {
+    margin-top: 20px;
+    padding: 15px;
+    border: 1px dashed #aaa;
+    max-width: 400px;
+  }
 </style>
 
-<!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
-
-<!-- Supabase -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 
@@ -60,6 +60,13 @@
   <p><strong>Module :</strong></p>
   <select id="deviceSelect"></select>
 
+  <!-- ✅ CRÉATION DE MODULE -->
+  <div id="createBox">
+    <h3>➕ Nouveau module</h3>
+    <input id="newDeviceName" placeholder="Nom du module">
+    <button onclick="createDevice()">Créer</button>
+  </div>
+
   <h2>⏱️ Échelle de temps</h2>
   <select id="timeScale" onchange="applyTimeScale()">
     <option value="hour">Dernière heure</option>
@@ -81,26 +88,22 @@
 <script>
 /* ================= SUPABASE ================= */
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
+const SUPABASE_KEY = "TA_CLE_ANON_ICI";
 
 const supabaseClient = supabase.createClient(
   SUPABASE_URL,
   SUPABASE_KEY
 );
 
+let currentUser = null;
 let chart = null;
 
 /* ================= LOGIN ================= */
 async function login() {
-  const email = document.getElementById("emailInput").value.trim();
-  const status = document.getElementById("loginStatus");
-  if (!email) { status.textContent = "Email requis"; return; }
-
+  const email = emailInput.value.trim();
+  if (!email) return;
   const { error } = await supabaseClient.auth.signInWithOtp({ email });
-
-  status.textContent = error
-    ? "❌ " + error.message
-    : "✅ Lien envoyé par email";
+  loginStatus.textContent = error ? error.message : "✅ Email envoyé";
 }
 
 async function logout() {
@@ -108,33 +111,28 @@ async function logout() {
   location.reload();
 }
 
-/* ================= AUTH LISTENER ================= */
+/* ================= AUTH ================= */
 supabaseClient.auth.onAuthStateChange((event, session) => {
   if (event === "SIGNED_IN") {
-    document.getElementById("loginBox").style.display = "none";
-    document.getElementById("dashboard").style.display = "block";
-    initDashboard(session.user);
+    currentUser = session.user;
+    loginBox.style.display = "none";
+    dashboard.style.display = "block";
+    loadDevices();
   }
 });
 
-/* ================= INIT ================= */
-async function initDashboard(user) {
-  await loadDevices(user.id);
-}
-
-/* ================= LOAD MODULES ================= */
-async function loadDevices(userId) {
-  const select = document.getElementById("deviceSelect");
-  select.innerHTML = "";
-
+/* ================= LOAD DEVICES ================= */
+async function loadDevices(selectId = null) {
   const { data, error } = await supabaseClient
     .from("devices")
     .select("device_id, name")
-    .eq("user_id", userId)
+    .eq("user_id", currentUser.id)
     .order("created_at");
 
+  deviceSelect.innerHTML = "";
+
   if (error || !data.length) {
-    document.getElementById("status").textContent = "Aucun module";
+    status.textContent = "Aucun module";
     return;
   }
 
@@ -142,72 +140,68 @@ async function loadDevices(userId) {
     const opt = document.createElement("option");
     opt.value = d.device_id;
     opt.textContent = d.name || d.device_id;
-    select.appendChild(opt);
+    deviceSelect.appendChild(opt);
   });
 
-  select.onchange = () => loadCurve(select.value);
-  loadCurve(data[0].device_id);
+  deviceSelect.onchange = () => loadCurve(deviceSelect.value);
+
+  const selected = selectId || data[0].device_id;
+  deviceSelect.value = selected;
+  loadCurve(selected);
+}
+
+/* ================= CREATE DEVICE ================= */
+async function createDevice() {
+  const name = newDeviceName.value.trim();
+  if (!name) { alert("Nom requis"); return; }
+
+  const deviceId = crypto.randomUUID();
+
+  const { error } = await supabaseClient
+    .from("devices")
+    .insert({
+      device_id: deviceId,
+      name: name,
+      user_id: currentUser.id
+    });
+
+  if (error) {
+    alert("Erreur création : " + error.message);
+    return;
+  }
+
+  newDeviceName.value = "";
+  await loadDevices(deviceId);
 }
 
 /* ================= LOAD CURVE ================= */
 async function loadCurve(deviceId) {
-  const status = document.getElementById("status");
-  const container = document.getElementById("chartContainer");
+  const { data: mesures, error } = await supabaseClient
+    .from("mesures")
+    .select("timestamp, humidity, threshold")
+    .eq("device_id", deviceId)
+    .order("timestamp");
 
-  status.textContent = "⏳ Chargement...";
-  container.style.display = "block";
-
-  
-const { data: mesures, error } = await supabaseClient
-  .from("mesures")
-  .select("timestamp, humidity, threshold")
-  .eq("device_id", deviceId)
-  .order("timestamp");
-
-console.log("deviceId =", deviceId);
-console.log("mesures =", mesures);
-console.error("error =", error);
-
-if (error) {
-  document.getElementById("status").textContent =
-    "❌ Erreur chargement mesures: " + error.message;
-  return;
-}
-
-
-  if (!mesures || mesures.length === 0) {
-    status.textContent = "⚠️ Aucune donnée pour ce module";
+  if (error || !mesures.length) {
+    status.textContent = "Aucune donnée";
+    chartContainer.style.display = "none";
     return;
   }
 
-  const humidityPoints = mesures.map(m => ({
-    x: new Date(m.timestamp),
-    y: m.humidity
-  }));
+  chartContainer.style.display = "block";
+  status.textContent = "✅ Courbe affichée";
 
-  const thresholdPoints = mesures.map(m => ({
-    x: new Date(m.timestamp),
-    y: m.threshold
-  }));
+  const h = mesures.map(m => ({ x: new Date(m.timestamp), y: m.humidity }));
+  const t = mesures.map(m => ({ x: new Date(m.timestamp), y: m.threshold }));
 
   if (chart) chart.destroy();
 
-  chart = new Chart(document.getElementById("chart"), {
+  chart = new Chart(chartCanvas, {
     type: "line",
     data: {
       datasets: [
-        {
-          label: "Humidité (%)",
-          data: humidityPoints,
-          borderColor: "#2c7",
-          tension: 0.2
-        },
-        {
-          label: "Seuil (%)",
-          data: thresholdPoints,
-          borderColor: "red",
-          pointRadius: 0
-        }
+        { label: "Humidité", data: h, borderColor: "#2c7", tension: 0.2 },
+        { label: "Seuil", data: t, borderColor: "red", pointRadius: 0 }
       ]
     },
     options: {
@@ -221,9 +215,8 @@ if (error) {
   });
 
   applyTimeScale();
-  status.textContent = "✅ Courbe affichée";
 }
-  
+
 /* ================= TIME SCALE ================= */
 function floorToTenMinutes(d) {
   const x = new Date(d);
@@ -233,38 +226,24 @@ function floorToTenMinutes(d) {
 
 function applyTimeScale() {
   if (!chart) return;
-
-  const scale = document.getElementById("timeScale").value;
+  const scale = timeScale.value;
   const now = new Date();
-  let start, end;
-
-  chart.options.scales.x.time.unit = undefined;
-  chart.options.scales.x.ticks = {};
+  let start, end = now;
 
   if (scale === "hour") {
     end = floorToTenMinutes(now);
-    start = new Date(end.getTime() - 60*60*1000);
+    start = new Date(end.getTime() - 3600000);
     chart.options.scales.x.time.unit = "minute";
     chart.options.scales.x.ticks.stepSize = 10;
   }
-
-  if (scale === "day") {
-    start = new Date(now.getTime() - 24*60*60*1000);
-    end = now;
-  }
-
+  if (scale === "day") start = new Date(now - 86400000);
   if (scale === "week") {
     start = new Date(now);
+    start.setDate(start.getDate() - 6);
     start.setHours(0,0,0,0);
-    start.setDate(start.getDate()-6);
-    end = now;
     chart.options.scales.x.time.unit = "day";
   }
-
-  if (scale === "month") {
-    start = new Date(now.getTime() - 30*24*60*60*1000);
-    end = now;
-  }
+  if (scale === "month") start = new Date(now - 30*86400000);
 
   chart.options.scales.x.min = start;
   chart.options.scales.x.max = end;
