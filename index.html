@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8" />
-<title>Plant Curve DDD</title>
+<title>Jardin en Eau</title>
 
 <style>
   body { font-family: Arial; margin: 30px; }
@@ -13,6 +13,13 @@
     margin-top: 10px;
     margin-right: 5px;
   }
+  #loginBox {
+    border: 2px solid #ccc;
+    padding: 20px;
+    max-width: 400px;
+    border-radius: 10px;
+  }
+  #dashboard { display: none; }
   #chartContainer {
     width: 100%;
     max-width: 900px;
@@ -20,32 +27,24 @@
     display: none;
   }
   #status { margin-top: 20px; font-weight: bold; }
-  #loginBox {
-    border: 2px solid #ccc;
-    padding: 20px;
-    max-width: 400px;
-    border-radius: 10px;
-    margin-bottom: 30px;
-  }
-  #dashboard { display:none; }
 </style>
 
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
 
-<!-- Supabase -->
+<!-- Supabase JS v2 -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 
 <body>
 
-<h1>🌱 Courbe humidité + seuil + arrosages</h1>
+<h1>🌱 Jardin en Eau</h1>
 
 <!-- LOGIN -->
 <div id="loginBox">
   <h2>Connexion</h2>
-  <input id="emailInput" type="email" placeholder="email@gmail.com" style="width:90%">
+  <input id="emailInput" type="email" placeholder="email@example.com" style="width:90%">
   <br>
   <button onclick="login()">Recevoir le lien de connexion</button>
   <p id="loginStatus"></p>
@@ -56,14 +55,6 @@
 
   <p><strong>Module :</strong></p>
   <select id="deviceSelect"></select>
-
-  <!-- ✅ CRÉATION DE MODULE AVEC DEVICE_ID -->
-  <div style="margin-top:10px;">
-    <input id="newDeviceId" placeholder="Device ID (ex: ESP32_SALON)" style="width:220px">
-    <br>
-    <input id="newDeviceName" placeholder="Nom du module" style="width:220px">
-    <button onclick="createDevice()">➕ Créer</button>
-  </div>
 
   <h2>⏱️ Échelle de temps</h2>
   <select id="timeScale" onchange="applyTimeScale()">
@@ -86,17 +77,18 @@
 <script>
 /* ================= SUPABASE ================= */
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
 
 const supabaseClient = supabase.createClient(
   SUPABASE_URL,
-  SUPABASE_KEY
+  SUPABASE_ANON_KEY
 );
 
-let chart = null;
+/* ================= ÉTAT GLOBAL ================= */
 let currentUser = null;
+let chart = null;
 
-/* ================= LOGIN ================= */
+/* ================= AUTH ================= */
 async function login() {
   const email = emailInput.value.trim();
   if (!email) return;
@@ -110,30 +102,32 @@ async function logout() {
   location.reload();
 }
 
-/* ================= SESSION AU CHARGEMENT ================= */
-(async () => {
+/* ================= INIT AUTH (POINT UNIQUE) ================= */
+async function initAuth() {
   const { data: { session } } = await supabaseClient.auth.getSession();
-  if (session) {
-    currentUser = session.user;
-    loginBox.style.display = "none";
-    dashboard.style.display = "block";
-    loadDevices(currentUser.id);
-  }
-})();
 
-/* ================= AUTH LISTENER ================= */
-supabaseClient.auth.onAuthStateChange((event, session) => {
-  if (event === "SIGNED_IN" && session) {
+  if (session && session.user) {
     currentUser = session.user;
     loginBox.style.display = "none";
     dashboard.style.display = "block";
-    loadDevices(currentUser.id);
+    await loadDevices(currentUser.id);
+  } else {
+    loginBox.style.display = "block";
+    dashboard.style.display = "none";
+  }
+}
+
+/* ✅ Listener UNIQUEMENT pour logout/changement d’état */
+supabaseClient.auth.onAuthStateChange((event) => {
+  if (event === "SIGNED_OUT") {
+    location.reload();
   }
 });
 
-/* ================= CHARGER MODULES ================= */
+/* ================= LOAD DEVICES ================= */
 async function loadDevices(userId) {
-  deviceSelect.innerHTML = "";
+  const select = deviceSelect;
+  select.innerHTML = "";
 
   const { data, error } = await supabaseClient
     .from("devices")
@@ -141,7 +135,7 @@ async function loadDevices(userId) {
     .eq("user_id", userId)
     .order("created_at");
 
-  if (error || !data.length) {
+  if (error || !data || data.length === 0) {
     status.textContent = "Aucun module";
     return;
   }
@@ -150,46 +144,14 @@ async function loadDevices(userId) {
     const opt = document.createElement("option");
     opt.value = d.device_id;
     opt.textContent = d.name || d.device_id;
-    deviceSelect.appendChild(opt);
+    select.appendChild(opt);
   });
 
-  deviceSelect.onchange = () => loadCurve(deviceSelect.value);
-  deviceSelect.value = data[0].device_id;
+  select.onchange = () => loadCurve(select.value);
   loadCurve(data[0].device_id);
 }
 
-/* ================= ✅ CRÉATION DE MODULE ================= */
-async function createDevice() {
-  const deviceId = newDeviceId.value.trim();
-  const name = newDeviceName.value.trim();
-
-  if (!deviceId || !name) {
-    alert("Veuillez saisir un device_id et un nom");
-    return;
-  }
-
-  const { error } = await supabaseClient
-    .from("devices")
-    .insert({
-      device_id: deviceId,
-      name: name,
-      user_id: currentUser.id
-    });
-
-  if (error) {
-    alert("Erreur création module : " + error.message);
-    return;
-  }
-
-  newDeviceId.value = "";
-  newDeviceName.value = "";
-
-  await loadDevices(currentUser.id);
-  deviceSelect.value = deviceId;
-  loadCurve(deviceId);
-}
-
-/* ================= COURBE ================= */
+/* ================= LOAD CURVE ================= */
 async function loadCurve(deviceId) {
   status.textContent = "⏳ Chargement...";
   chartContainer.style.display = "block";
@@ -201,7 +163,7 @@ async function loadCurve(deviceId) {
     .order("timestamp");
 
   if (error || !mesures || mesures.length === 0) {
-    status.textContent = "⚠️ Aucune donnée pour ce module";
+    status.textContent = "⚠️ Aucune donnée";
     chartContainer.style.display = "none";
     return;
   }
@@ -260,7 +222,7 @@ function applyTimeScale() {
   if (scale === "week") {
     start = new Date(now);
     start.setDate(start.getDate() - 6);
-    start.setHours(0, 0, 0, 0);
+    start.setHours(0,0,0,0);
     chart.options.scales.x.time.unit = "day";
   }
   if (scale === "month") start = new Date(now - 30 * 86400000);
@@ -269,6 +231,9 @@ function applyTimeScale() {
   chart.options.scales.x.max = end;
   chart.update();
 }
+
+/* ================= LANCEMENT ================= */
+initAuth();
 </script>
 
 </body>
