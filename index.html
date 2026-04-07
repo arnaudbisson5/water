@@ -56,6 +56,16 @@
   <p><strong>Module :</strong></p>
   <select id="deviceSelect"></select>
 
+  <!-- RENOMMAGE MODULE -->
+  <div style="margin-top:10px;">
+    <input
+      id="deviceNameInput"
+      placeholder="Nom du module"
+      style="width:220px"
+    >
+    <button onclick="renameDevice()">✏️ Renommer</button>
+  </div>
+
   <h2>⏱️ Échelle de temps</h2>
   <select id="timeScale" onchange="applyTimeScale()">
     <option value="hour">Dernière heure</option>
@@ -84,9 +94,10 @@ const supabaseClient = supabase.createClient(
   SUPABASE_ANON_KEY
 );
 
-/* ================= ÉTAT GLOBAL ================= */
+/* ================= STATE ================= */
 let currentUser = null;
 let chart = null;
+let devicesCache = [];
 
 /* ================= AUTH ================= */
 async function login() {
@@ -102,7 +113,7 @@ async function logout() {
   location.reload();
 }
 
-/* ================= INIT AUTH (POINT UNIQUE) ================= */
+/* ================= INIT AUTH ================= */
 async function initAuth() {
   const { data: { session } } = await supabaseClient.auth.getSession();
 
@@ -117,7 +128,6 @@ async function initAuth() {
   }
 }
 
-/* ✅ Listener UNIQUEMENT pour logout/changement d’état */
 supabaseClient.auth.onAuthStateChange((event) => {
   if (event === "SIGNED_OUT") {
     location.reload();
@@ -126,8 +136,7 @@ supabaseClient.auth.onAuthStateChange((event) => {
 
 /* ================= LOAD DEVICES ================= */
 async function loadDevices(userId) {
-  const select = deviceSelect;
-  select.innerHTML = "";
+  deviceSelect.innerHTML = "";
 
   const { data, error } = await supabaseClient
     .from("devices")
@@ -140,15 +149,47 @@ async function loadDevices(userId) {
     return;
   }
 
+  devicesCache = data;
+
   data.forEach(d => {
     const opt = document.createElement("option");
     opt.value = d.device_id;
     opt.textContent = d.name || d.device_id;
-    select.appendChild(opt);
+    deviceSelect.appendChild(opt);
   });
 
-  select.onchange = () => loadCurve(select.value);
+  deviceSelect.onchange = () => {
+    const d = devicesCache.find(x => x.device_id === deviceSelect.value);
+    deviceNameInput.value = d?.name || "";
+    loadCurve(deviceSelect.value);
+  };
+
+  deviceSelect.value = data[0].device_id;
+  deviceNameInput.value = data[0].name || "";
   loadCurve(data[0].device_id);
+}
+
+/* ================= RENAME DEVICE ================= */
+async function renameDevice() {
+  const deviceId = deviceSelect.value;
+  const newName = deviceNameInput.value.trim();
+  if (!newName) return alert("Nom invalide");
+
+  const { error } = await supabaseClient
+    .from("devices")
+    .update({ name: newName })
+    .eq("device_id", deviceId);
+
+  if (error) {
+    alert("Erreur renommage : " + error.message);
+    return;
+  }
+
+  deviceSelect.selectedOptions[0].textContent = newName;
+  const d = devicesCache.find(x => x.device_id === deviceId);
+  if (d) d.name = newName;
+
+  alert("✅ Nom du module mis à jour");
 }
 
 /* ================= LOAD CURVE ================= */
@@ -232,7 +273,7 @@ function applyTimeScale() {
   chart.update();
 }
 
-/* ================= LANCEMENT ================= */
+/* ================= START ================= */
 initAuth();
 </script>
 
