@@ -7,13 +7,9 @@
 <style>
   body { font-family: Arial; margin: 30px; }
   h1 { color: #2c7; }
-  select, button {
-    padding: 8px;
-    font-size: 16px;
-    margin-top: 10px;
-  }
-  #chartContainer { max-width: 900px; margin-top: 30px; }
+  select { padding: 8px; font-size: 16px; margin-right: 10px; }
   #status { margin-top: 15px; font-weight: bold; }
+  #chartContainer { max-width: 900px; margin-top: 30px; }
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -26,6 +22,14 @@
 <h1>🌱 Jardin en Eau</h1>
 
 <select id="deviceSelect"></select>
+
+<select id="timeScale" onchange="applyTimeScale()">
+  <option value="hour">Dernière heure</option>
+  <option value="day" selected>Dernier jour</option>
+  <option value="week">Dernière semaine</option>
+  <option value="month">Dernier mois</option>
+</select>
+
 <div id="status"></div>
 
 <div id="chartContainer">
@@ -37,10 +41,14 @@
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
 
-const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabaseClient = supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY
+);
 
 /* ================= STATE ================= */
 let chart = null;
+let allMesures = [];
 const PAGE_SIZE = 1000;
 const MAX_POINTS = 10000;
 
@@ -59,7 +67,6 @@ async function loadDevices() {
   });
 
   deviceSelect.onchange = () => loadCurve(deviceSelect.value);
-
   if (data.length) loadCurve(data[0].device_id);
 }
 
@@ -69,29 +76,21 @@ async function loadCurve(deviceId) {
   console.clear();
   console.log("Chargement des données pour :", deviceId);
 
-  let allMesures = [];
+  allMesures = [];
   let from = 0;
 
   while (allMesures.length < MAX_POINTS) {
-    const to = from + PAGE_SIZE - 1;
-
-    const { data, error } = await supabaseClient
+    const { data } = await supabaseClient
       .from("mesures")
       .select("timestamp, humidity, threshold")
       .eq("device_id", deviceId)
       .order("timestamp")
-      .range(from, to);
-
-    if (error) {
-      console.error("Erreur Supabase :", error);
-      break;
-    }
+      .range(from, from + PAGE_SIZE - 1);
 
     if (!data || data.length === 0) break;
 
     allMesures = allMesures.concat(data);
-
-    console.log(`Page ${from} → ${to} : ${data.length} lignes`);
+    console.log(`Page ${from} → ${from + PAGE_SIZE - 1} : ${data.length} lignes`);
 
     if (data.length < PAGE_SIZE) break;
     from += PAGE_SIZE;
@@ -100,13 +99,13 @@ async function loadCurve(deviceId) {
   console.log("TOTAL lignes récupérées :", allMesures.length);
   status.textContent = `✅ ${allMesures.length} points chargés`;
 
-  drawChart(allMesures);
+  drawChart();
 }
 
 /* ================= DRAW CHART ================= */
-function drawChart(mesures) {
-  const h = mesures.map(m => ({ x: new Date(m.timestamp), y: m.humidity }));
-  const t = mesures.map(m => ({ x: new Date(m.timestamp), y: m.threshold }));
+function drawChart() {
+  const h = allMesures.map(m => ({ x: new Date(m.timestamp), y: m.humidity }));
+  const t = allMesures.map(m => ({ x: new Date(m.timestamp), y: m.threshold }));
 
   if (chart) chart.destroy();
 
@@ -127,6 +126,27 @@ function drawChart(mesures) {
       }
     }
   });
+
+  applyTimeScale();
+}
+
+/* ================= TIME SCALE ================= */
+function applyTimeScale() {
+  if (!chart) return;
+
+  const now = new Date();
+  let start = null;
+
+  switch (timeScale.value) {
+    case "hour":  start = new Date(now - 1 * 3600000); break;
+    case "day":   start = new Date(now - 24 * 3600000); break;
+    case "week":  start = new Date(now - 7 * 24 * 3600000); break;
+    case "month": start = new Date(now - 30 * 24 * 3600000); break;
+  }
+
+  chart.options.scales.x.min = start;
+  chart.options.scales.x.max = now;
+  chart.update();
 }
 
 /* ================= START ================= */
