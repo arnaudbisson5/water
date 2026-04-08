@@ -23,10 +23,10 @@
   #chartContainer { max-width: 900px; margin-top: 30px; }
 </style>
 
-<!-- ✅ LIBRARIES CORRECTEMENT INCLUSES -->
-https://cdn.jsdelivr.net/npm/chart.js
+<!-- ✅ Scripts correctement inclus -->
+<script src="https://cdn.jsdelivrt.js
 https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns
-https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2
+https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2</script>
 </head>
 
 <body>
@@ -58,7 +58,7 @@ https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2
   <div id="status"></div>
 
   <div id="chartContainer">
-    <canvas id="chart"></canvas>
+    <canvas id="chartCanvas"></canvas>
   </div>
 
   <br>
@@ -77,7 +77,7 @@ const supabaseClient = supabase.createClient(
 
 /* ================= STATE ================= */
 let currentUser = null;
-let chart = null;
+let chartInstance = null;
 let allMesures = [];
 const PAGE_SIZE = 1000;
 const MAX_POINTS = 10000;
@@ -87,13 +87,21 @@ loginBtn.onclick = async () => {
   const email = emailInput.value.trim();
   if (!email) return;
   const { error } = await supabaseClient.auth.signInWithOtp({ email });
-  loginStatus.textContent = error ? error.message : "✅ Email envoyé";
+  loginStatus.textContent = error
+    ? error.message
+    : "✅ Email envoyé (Magic Link)";
 };
 
 logoutBtn.onclick = async () => {
   await supabaseClient.auth.signOut();
   location.reload();
 };
+
+supabaseClient.auth.onAuthStateChange((_event, session) => {
+  if (session?.user && !currentUser) {
+    onLogin(session.user);
+  }
+});
 
 /* ================= INIT ================= */
 async function init() {
@@ -102,12 +110,6 @@ async function init() {
     onLogin(session.user);
   }
 }
-
-supabaseClient.auth.onAuthStateChange((_event, session) => {
-  if (session?.user && !currentUser) {
-    onLogin(session.user);
-  }
-});
 
 /* ================= ON LOGIN ================= */
 async function onLogin(user) {
@@ -142,7 +144,7 @@ async function loadDevices() {
   loadCurve(data[0].device_id);
 }
 
-/* ================= LOAD CURVE ================= */
+/* ================= LOAD CURVE (PAGINATION) ================= */
 async function loadCurve(deviceId) {
   status.textContent = "⏳ Chargement...";
   allMesures = [];
@@ -157,6 +159,7 @@ async function loadCurve(deviceId) {
       .range(from, from + PAGE_SIZE - 1);
 
     if (!data || data.length === 0) break;
+
     allMesures.push(...data);
     if (data.length < PAGE_SIZE) break;
     from += PAGE_SIZE;
@@ -171,9 +174,11 @@ function drawChart() {
   const h = allMesures.map(m => ({ x: new Date(m.timestamp), y: m.humidity }));
   const t = allMesures.map(m => ({ x: new Date(m.timestamp), y: m.threshold }));
 
-  if (chart) chart.destroy();
+  if (chartInstance) chartInstance.destroy();
 
-  chart = new Chart(chart.getContext("2d"), {
+  const ctx = document.getElementById("chartCanvas").getContext("2d");
+
+  chartInstance = new Chart(ctx, {
     type: "line",
     data: {
       datasets: [
@@ -183,6 +188,7 @@ function drawChart() {
     },
     options: {
       parsing: false,
+      responsive: true,
       scales: {
         x: { type: "time" },
         y: { min: 0, max: 100 }
@@ -197,18 +203,20 @@ function drawChart() {
 timeScale.onchange = applyTimeScale;
 
 function applyTimeScale() {
-  if (!chart) return;
+  if (!chartInstance) return;
+
   const now = new Date();
   let start;
-  const v = timeScale.value;
-  if (v === "hour") start = new Date(now - 3600000);
-  if (v === "day") start = new Date(now - 86400000);
-  if (v === "week") start = new Date(now - 7 * 86400000);
-  if (v === "month") start = new Date(now - 30 * 86400000);
+  switch (timeScale.value) {
+    case "hour":  start = new Date(now - 3600000); break;
+    case "day":   start = new Date(now - 86400000); break;
+    case "week":  start = new Date(now - 7 * 86400000); break;
+    case "month": start = new Date(now - 30 * 86400000); break;
+  }
 
-  chart.options.scales.x.min = start;
-  chart.options.scales.x.max = now;
-  chart.update();
+  chartInstance.options.scales.x.min = start;
+  chartInstance.options.scales.x.max = now;
+  chartInstance.update();
 }
 
 init();
