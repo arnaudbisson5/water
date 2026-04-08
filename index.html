@@ -143,9 +143,9 @@ async function loadCurve(deviceId) {
     .select("timestamp, humidity, threshold")
     .eq("device_id", deviceId)
     .order("timestamp")
-    .range(0, 9999);   // ✅ CORRECTION CRITIQUE
+    .limit(10000);   // ✅ EXTENSION À 10 000 POINTS
 
-  if (error || !mesures || mesures.length === 0) {
+  if (error || !mesures?.length) {
     status.textContent = "⚠️ Aucune donnée";
     chartContainer.style.display = "none";
     return;
