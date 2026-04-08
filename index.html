@@ -12,16 +12,21 @@
     font-size: 16px;
     margin: 5px 5px 5px 0;
   }
-  #loginBox { max-width: 400px; border: 2px solid #ccc; padding: 20px; border-radius: 10px; }
+  #loginBox {
+    max-width: 400px;
+    border: 2px solid #ccc;
+    padding: 20px;
+    border-radius: 10px;
+  }
   #dashboard { display: none; }
   #status { margin-top: 15px; font-weight: bold; }
   #chartContainer { max-width: 900px; margin-top: 30px; }
 </style>
 
-<!-- LIBS -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- ✅ LIBRARIES CORRECTEMENT INCLUSES -->
+https://cdn.jsdelivr.net/npm/chart.js
+https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns
+https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2
 </head>
 
 <body>
@@ -33,18 +38,17 @@
   <h2>Connexion</h2>
   <input id="emailInput" type="email" placeholder="email@example.com" style="width:90%">
   <br>
-  <button onclick="login()">Recevoir le lien de connexion</button>
+  <button id="loginBtn">Recevoir le lien de connexion</button>
   <p id="loginStatus"></p>
 </div>
 
 <!-- DASHBOARD -->
 <div id="dashboard">
-
   <p><strong>Module :</strong></p>
   <select id="deviceSelect"></select>
 
   <h3>⏱️ Échelle de temps</h3>
-  <select id="timeScale" onchange="applyTimeScale()">
+  <select id="timeScale">
     <option value="hour">Dernière heure</option>
     <option value="day" selected>Dernier jour</option>
     <option value="week">Dernière semaine</option>
@@ -58,13 +62,13 @@
   </div>
 
   <br>
-  <button onclick="logout()">Déconnexion</button>
+  <button id="logoutBtn">Déconnexion</button>
 </div>
 
 <script>
 /* ================= SUPABASE ================= */
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
+const SUPABASE_ANON_KEY = "TA_CLE_ANON_ICI";
 
 const supabaseClient = supabase.createClient(
   SUPABASE_URL,
@@ -72,40 +76,46 @@ const supabaseClient = supabase.createClient(
 );
 
 /* ================= STATE ================= */
+let currentUser = null;
 let chart = null;
 let allMesures = [];
 const PAGE_SIZE = 1000;
 const MAX_POINTS = 10000;
-let currentUser = null;
 
 /* ================= AUTH ================= */
-async function login() {
+loginBtn.onclick = async () => {
   const email = emailInput.value.trim();
   if (!email) return;
-
   const { error } = await supabaseClient.auth.signInWithOtp({ email });
-  loginStatus.textContent = error
-    ? error.message
-    : "✅ Email envoyé (Magic Link)";
-}
+  loginStatus.textContent = error ? error.message : "✅ Email envoyé";
+};
 
-async function logout() {
+logoutBtn.onclick = async () => {
   await supabaseClient.auth.signOut();
   location.reload();
-}
+};
 
-async function initAuth() {
+/* ================= INIT ================= */
+async function init() {
   const { data: { session } } = await supabaseClient.auth.getSession();
-
   if (session?.user) {
-    currentUser = session.user;
-    loginBox.style.display = "none";
-    dashboard.style.display = "block";
-    loadDevices();
+    onLogin(session.user);
   }
 }
 
-supabaseClient.auth.onAuthStateChange(() => location.reload());
+supabaseClient.auth.onAuthStateChange((_event, session) => {
+  if (session?.user && !currentUser) {
+    onLogin(session.user);
+  }
+});
+
+/* ================= ON LOGIN ================= */
+async function onLogin(user) {
+  currentUser = user;
+  loginBox.style.display = "none";
+  dashboard.style.display = "block";
+  await loadDevices();
+}
 
 /* ================= DEVICES ================= */
 async function loadDevices() {
@@ -132,11 +142,9 @@ async function loadDevices() {
   loadCurve(data[0].device_id);
 }
 
-/* ================= LOAD CURVE (PAGINATED) ================= */
+/* ================= LOAD CURVE ================= */
 async function loadCurve(deviceId) {
   status.textContent = "⏳ Chargement...";
-  console.clear();
-
   allMesures = [];
   let from = 0;
 
@@ -149,17 +157,12 @@ async function loadCurve(deviceId) {
       .range(from, from + PAGE_SIZE - 1);
 
     if (!data || data.length === 0) break;
-
-    allMesures = allMesures.concat(data);
-    console.log(`Page ${from} → ${from + PAGE_SIZE - 1} : ${data.length} lignes`);
-
+    allMesures.push(...data);
     if (data.length < PAGE_SIZE) break;
     from += PAGE_SIZE;
   }
 
   status.textContent = `✅ ${allMesures.length} points chargés`;
-  console.log("TOTAL chargé :", allMesures.length);
-
   drawChart();
 }
 
@@ -170,7 +173,7 @@ function drawChart() {
 
   if (chart) chart.destroy();
 
-  chart = new Chart(document.getElementById("chart"), {
+  chart = new Chart(chart.getContext("2d"), {
     type: "line",
     data: {
       datasets: [
@@ -180,7 +183,6 @@ function drawChart() {
     },
     options: {
       parsing: false,
-      responsive: true,
       scales: {
         x: { type: "time" },
         y: { min: 0, max: 100 }
@@ -192,24 +194,24 @@ function drawChart() {
 }
 
 /* ================= TIME SCALE ================= */
+timeScale.onchange = applyTimeScale;
+
 function applyTimeScale() {
   if (!chart) return;
-
   const now = new Date();
   let start;
-
-  if (timeScale.value === "hour")  start = new Date(now - 3600000);
-  if (timeScale.value === "day")   start = new Date(now - 86400000);
-  if (timeScale.value === "week")  start = new Date(now - 7 * 86400000);
-  if (timeScale.value === "month") start = new Date(now - 30 * 86400000);
+  const v = timeScale.value;
+  if (v === "hour") start = new Date(now - 3600000);
+  if (v === "day") start = new Date(now - 86400000);
+  if (v === "week") start = new Date(now - 7 * 86400000);
+  if (v === "month") start = new Date(now - 30 * 86400000);
 
   chart.options.scales.x.min = start;
   chart.options.scales.x.max = now;
   chart.update();
 }
 
-/* ================= START ================= */
-initAuth();
+init();
 </script>
 
 </body>
