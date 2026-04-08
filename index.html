@@ -138,14 +138,29 @@ async function loadCurve(deviceId) {
   status.textContent = "⏳ Chargement...";
   chartContainer.style.display = "block";
 
-  const { data: mesures, error } = await supabaseClient
-    .from("mesures")
-    .select("timestamp, humidity, threshold")
-    .eq("device_id", deviceId)
-    .order("timestamp")
-    .limit(10000);   // ✅ EXTENSION À 10 000 POINTS
+  const PAGE_SIZE = 1000;
+  const MAX_POINTS = 10000;
 
-  if (error || !mesures?.length) {
+  let mesures = [];
+  let from = 0;
+
+  while (mesures.length < MAX_POINTS) {
+    const { data, error } = await supabaseClient
+      .from("mesures")
+      .select("timestamp, humidity, threshold")
+      .eq("device_id", deviceId)
+      .order("timestamp")
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error || !data || data.length === 0) break;
+
+    mesures = mesures.concat(data);
+
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  if (mesures.length === 0) {
     status.textContent = "⚠️ Aucune donnée";
     chartContainer.style.display = "none";
     return;
@@ -177,7 +192,6 @@ async function loadCurve(deviceId) {
   applyTimeScale();
   status.textContent = `✅ ${mesures.length} points chargés`;
 }
-
 /* ================= TIME SCALE ================= */
 function applyTimeScale() {
   if (!chart) return;
