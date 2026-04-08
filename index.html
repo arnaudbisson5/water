@@ -1,32 +1,19 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8" />
+<meta charset="UTF-8">
 <title>Jardin en Eau</title>
 
 <style>
   body { font-family: Arial; margin: 30px; }
   h1 { color: #2c7; }
-  input, button, select {
-    padding: 10px;
+  select, button {
+    padding: 8px;
     font-size: 16px;
     margin-top: 10px;
-    margin-right: 5px;
   }
-  #loginBox {
-    border: 2px solid #ccc;
-    padding: 20px;
-    max-width: 400px;
-    border-radius: 10px;
-  }
-  #dashboard { display: none; }
-  #chartContainer {
-    width: 100%;
-    max-width: 900px;
-    margin-top: 40px;
-    display: none;
-  }
-  #status { margin-top: 20px; font-weight: bold; }
+  #chartContainer { max-width: 900px; margin-top: 30px; }
+  #status { margin-top: 15px; font-weight: bold; }
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -38,91 +25,33 @@
 
 <h1>🌱 Jardin en Eau</h1>
 
-<div id="loginBox">
-  <h2>Connexion</h2>
-  <input id="emailInput" type="email" placeholder="email@example.com" style="width:90%">
-  <br>
-  <button onclick="login()">Recevoir le lien de connexion</button>
-  <p id="loginStatus"></p>
-</div>
+<select id="deviceSelect"></select>
+<div id="status"></div>
 
-<div id="dashboard">
-
-  <p><strong>Module :</strong></p>
-  <select id="deviceSelect"></select>
-
-  <div style="margin-top:10px;">
-    <input id="deviceNameInput" placeholder="Nom du module" style="width:220px">
-    <button onclick="renameDevice()">✏️ Renommer</button>
-  </div>
-
-  <h2>⏱️ Échelle de temps</h2>
-  <select id="timeScale" onchange="applyTimeScale()">
-    <option value="hour">Dernière heure</option>
-    <option value="day" selected>Dernier jour</option>
-    <option value="week">Dernière semaine</option>
-    <option value="month">Dernier mois</option>
-  </select>
-
-  <div id="status"></div>
-
-  <div id="chartContainer">
-    <canvas id="chart"></canvas>
-  </div>
-
-  <br>
-  <button onclick="logout()">Déconnexion</button>
+<div id="chartContainer">
+  <canvas id="chart"></canvas>
 </div>
 
 <script>
 /* ================= SUPABASE ================= */
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
+
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /* ================= STATE ================= */
-let currentUser = null;
 let chart = null;
-let devicesCache = [];
-
-/* ================= AUTH ================= */
-async function login() {
-  const email = emailInput.value.trim();
-  if (!email) return;
-  const { error } = await supabaseClient.auth.signInWithOtp({ email });
-  loginStatus.textContent = error ? error.message : "✅ Email envoyé";
-}
-
-async function logout() {
-  await supabaseClient.auth.signOut();
-  location.reload();
-}
-
-/* ================= INIT AUTH ================= */
-async function initAuth() {
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  if (session?.user) {
-    currentUser = session.user;
-    loginBox.style.display = "none";
-    dashboard.style.display = "block";
-    await loadDevices(currentUser.id);
-  }
-}
-supabaseClient.auth.onAuthStateChange((event) => {
-  if (event === "SIGNED_OUT") location.reload();
-});
+const PAGE_SIZE = 1000;
+const MAX_POINTS = 10000;
 
 /* ================= LOAD DEVICES ================= */
-async function loadDevices(userId) {
-  deviceSelect.innerHTML = "";
+async function loadDevices() {
   const { data } = await supabaseClient
     .from("devices")
     .select("device_id, name")
-    .eq("user_id", userId)
     .order("created_at");
 
-  devicesCache = data || [];
-  devicesCache.forEach(d => {
+  data.forEach(d => {
     const opt = document.createElement("option");
     opt.value = d.device_id;
     opt.textContent = d.name || d.device_id;
@@ -130,27 +59,52 @@ async function loadDevices(userId) {
   });
 
   deviceSelect.onchange = () => loadCurve(deviceSelect.value);
-  if (devicesCache.length) loadCurve(devicesCache[0].device_id);
+
+  if (data.length) loadCurve(data[0].device_id);
 }
 
-/* ================= LOAD CURVE ================= */
+/* ================= LOAD CURVE (PAGINATION) ================= */
 async function loadCurve(deviceId) {
   status.textContent = "⏳ Chargement...";
-  chartContainer.style.display = "block";
+  console.clear();
+  console.log("Chargement des données pour :", deviceId);
 
-  const { data: mesures, error } = await supabaseClient
-    .from("mesures")
-    .select("timestamp, humidity, threshold")
-    .eq("device_id", deviceId)
-    .order("timestamp")
-    .range(0, 9999);   // ✅ CORRECTION CRITIQUE
+  let allMesures = [];
+  let from = 0;
 
-  if (error || !mesures || mesures.length === 0) {
-    status.textContent = "⚠️ Aucune donnée";
-    chartContainer.style.display = "none";
-    return;
+  while (allMesures.length < MAX_POINTS) {
+    const to = from + PAGE_SIZE - 1;
+
+    const { data, error } = await supabaseClient
+      .from("mesures")
+      .select("timestamp, humidity, threshold")
+      .eq("device_id", deviceId)
+      .order("timestamp")
+      .range(from, to);
+
+    if (error) {
+      console.error("Erreur Supabase :", error);
+      break;
+    }
+
+    if (!data || data.length === 0) break;
+
+    allMesures = allMesures.concat(data);
+
+    console.log(`Page ${from} → ${to} : ${data.length} lignes`);
+
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
   }
 
+  console.log("TOTAL lignes récupérées :", allMesures.length);
+  status.textContent = `✅ ${allMesures.length} points chargés`;
+
+  drawChart(allMesures);
+}
+
+/* ================= DRAW CHART ================= */
+function drawChart(mesures) {
   const h = mesures.map(m => ({ x: new Date(m.timestamp), y: m.humidity }));
   const t = mesures.map(m => ({ x: new Date(m.timestamp), y: m.threshold }));
 
@@ -173,27 +127,10 @@ async function loadCurve(deviceId) {
       }
     }
   });
-
-  applyTimeScale();
-  status.textContent = `✅ ${mesures.length} points chargés`;
-}
-
-/* ================= TIME SCALE ================= */
-function applyTimeScale() {
-  if (!chart) return;
-  const now = new Date();
-  let start = new Date(now - 86400000);
-  if (timeScale.value === "hour") start = new Date(now - 3600000);
-  if (timeScale.value === "week") start = new Date(now - 7*86400000);
-  if (timeScale.value === "month") start = new Date(now - 30*86400000);
-
-  chart.options.scales.x.min = start;
-  chart.options.scales.x.max = now;
-  chart.update();
 }
 
 /* ================= START ================= */
-initAuth();
+loadDevices();
 </script>
 
 </body>
