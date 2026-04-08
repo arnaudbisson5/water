@@ -2,16 +2,23 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Jardin en Eau</title>
+<title>🌱 Jardin en Eau</title>
 
 <style>
   body { font-family: Arial; margin: 30px; }
   h1 { color: #2c7; }
-  select { padding: 8px; font-size: 16px; margin-right: 10px; }
+  input, select, button {
+    padding: 8px;
+    font-size: 16px;
+    margin: 5px 5px 5px 0;
+  }
+  #loginBox { max-width: 400px; border: 2px solid #ccc; padding: 20px; border-radius: 10px; }
+  #dashboard { display: none; }
   #status { margin-top: 15px; font-weight: bold; }
   #chartContainer { max-width: 900px; margin-top: 30px; }
 </style>
 
+<!-- LIBS -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -21,19 +28,37 @@
 
 <h1>🌱 Jardin en Eau</h1>
 
-<select id="deviceSelect"></select>
+<!-- LOGIN -->
+<div id="loginBox">
+  <h2>Connexion</h2>
+  <input id="emailInput" type="email" placeholder="email@example.com" style="width:90%">
+  <br>
+  <button onclick="login()">Recevoir le lien de connexion</button>
+  <p id="loginStatus"></p>
+</div>
 
-<select id="timeScale" onchange="applyTimeScale()">
-  <option value="hour">Dernière heure</option>
-  <option value="day" selected>Dernier jour</option>
-  <option value="week">Dernière semaine</option>
-  <option value="month">Dernier mois</option>
-</select>
+<!-- DASHBOARD -->
+<div id="dashboard">
 
-<div id="status"></div>
+  <p><strong>Module :</strong></p>
+  <select id="deviceSelect"></select>
 
-<div id="chartContainer">
-  <canvas id="chart"></canvas>
+  <h3>⏱️ Échelle de temps</h3>
+  <select id="timeScale" onchange="applyTimeScale()">
+    <option value="hour">Dernière heure</option>
+    <option value="day" selected>Dernier jour</option>
+    <option value="week">Dernière semaine</option>
+    <option value="month">Dernier mois</option>
+  </select>
+
+  <div id="status"></div>
+
+  <div id="chartContainer">
+    <canvas id="chart"></canvas>
+  </div>
+
+  <br>
+  <button onclick="logout()">Déconnexion</button>
 </div>
 
 <script>
@@ -51,14 +76,51 @@ let chart = null;
 let allMesures = [];
 const PAGE_SIZE = 1000;
 const MAX_POINTS = 10000;
+let currentUser = null;
 
-/* ================= LOAD DEVICES ================= */
+/* ================= AUTH ================= */
+async function login() {
+  const email = emailInput.value.trim();
+  if (!email) return;
+
+  const { error } = await supabaseClient.auth.signInWithOtp({ email });
+  loginStatus.textContent = error
+    ? error.message
+    : "✅ Email envoyé (Magic Link)";
+}
+
+async function logout() {
+  await supabaseClient.auth.signOut();
+  location.reload();
+}
+
+async function initAuth() {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+
+  if (session?.user) {
+    currentUser = session.user;
+    loginBox.style.display = "none";
+    dashboard.style.display = "block";
+    loadDevices();
+  }
+}
+
+supabaseClient.auth.onAuthStateChange(() => location.reload());
+
+/* ================= DEVICES ================= */
 async function loadDevices() {
-  const { data } = await supabaseClient
+  const { data, error } = await supabaseClient
     .from("devices")
     .select("device_id, name")
+    .eq("user_id", currentUser.id)
     .order("created_at");
 
+  if (error || !data?.length) {
+    status.textContent = "Aucun module";
+    return;
+  }
+
+  deviceSelect.innerHTML = "";
   data.forEach(d => {
     const opt = document.createElement("option");
     opt.value = d.device_id;
@@ -67,14 +129,13 @@ async function loadDevices() {
   });
 
   deviceSelect.onchange = () => loadCurve(deviceSelect.value);
-  if (data.length) loadCurve(data[0].device_id);
+  loadCurve(data[0].device_id);
 }
 
-/* ================= LOAD CURVE (PAGINATION) ================= */
+/* ================= LOAD CURVE (PAGINATED) ================= */
 async function loadCurve(deviceId) {
   status.textContent = "⏳ Chargement...";
   console.clear();
-  console.log("Chargement des données pour :", deviceId);
 
   allMesures = [];
   let from = 0;
@@ -96,13 +157,13 @@ async function loadCurve(deviceId) {
     from += PAGE_SIZE;
   }
 
-  console.log("TOTAL lignes récupérées :", allMesures.length);
   status.textContent = `✅ ${allMesures.length} points chargés`;
+  console.log("TOTAL chargé :", allMesures.length);
 
   drawChart();
 }
 
-/* ================= DRAW CHART ================= */
+/* ================= CHART ================= */
 function drawChart() {
   const h = allMesures.map(m => ({ x: new Date(m.timestamp), y: m.humidity }));
   const t = allMesures.map(m => ({ x: new Date(m.timestamp), y: m.threshold }));
@@ -135,14 +196,12 @@ function applyTimeScale() {
   if (!chart) return;
 
   const now = new Date();
-  let start = null;
+  let start;
 
-  switch (timeScale.value) {
-    case "hour":  start = new Date(now - 1 * 3600000); break;
-    case "day":   start = new Date(now - 24 * 3600000); break;
-    case "week":  start = new Date(now - 7 * 24 * 3600000); break;
-    case "month": start = new Date(now - 30 * 24 * 3600000); break;
-  }
+  if (timeScale.value === "hour")  start = new Date(now - 3600000);
+  if (timeScale.value === "day")   start = new Date(now - 86400000);
+  if (timeScale.value === "week")  start = new Date(now - 7 * 86400000);
+  if (timeScale.value === "month") start = new Date(now - 30 * 86400000);
 
   chart.options.scales.x.min = start;
   chart.options.scales.x.max = now;
@@ -150,7 +209,7 @@ function applyTimeScale() {
 }
 
 /* ================= START ================= */
-loadDevices();
+initAuth();
 </script>
 
 </body>
