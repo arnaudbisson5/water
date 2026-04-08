@@ -1,54 +1,63 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<title>🌱 Jardin en Eau</title>
+<meta charset="UTF-8" />
+<title>Jardin en Eau</title>
 
 <style>
   body { font-family: Arial; margin: 30px; }
   h1 { color: #2c7; }
-  input, select, button {
-    padding: 8px;
+  input, button, select {
+    padding: 10px;
     font-size: 16px;
-    margin: 5px 5px 5px 0;
+    margin-top: 10px;
+    margin-right: 5px;
   }
   #loginBox {
-    max-width: 400px;
     border: 2px solid #ccc;
     padding: 20px;
+    max-width: 400px;
     border-radius: 10px;
   }
   #dashboard { display: none; }
-  #status { margin-top: 15px; font-weight: bold; }
-  #chartContainer { max-width: 900px; margin-top: 30px; }
+  #chartContainer {
+    width: 100%;
+    max-width: 900px;
+    margin-top: 40px;
+    display: none;
+  }
+  #status { margin-top: 20px; font-weight: bold; }
 </style>
 
-<!-- ✅ Scripts correctement inclus -->
-<script src="https://cdn.jsdelivrt.js
-https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns
-https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 
 <body>
 
 <h1>🌱 Jardin en Eau</h1>
 
-<!-- LOGIN -->
 <div id="loginBox">
   <h2>Connexion</h2>
   <input id="emailInput" type="email" placeholder="email@example.com" style="width:90%">
   <br>
-  <button id="loginBtn">Recevoir le lien de connexion</button>
+  <button onclick="login()">Recevoir le lien de connexion</button>
   <p id="loginStatus"></p>
 </div>
 
-<!-- DASHBOARD -->
 <div id="dashboard">
+
   <p><strong>Module :</strong></p>
   <select id="deviceSelect"></select>
 
-  <h3>⏱️ Échelle de temps</h3>
-  <select id="timeScale">
+  <div style="margin-top:10px;">
+    <input id="deviceNameInput" placeholder="Nom du module" style="width:220px">
+    <button onclick="renameDevice()">✏️ Renommer</button>
+  </div>
+
+  <h2>⏱️ Échelle de temps</h2>
+  <select id="timeScale" onchange="applyTimeScale()">
     <option value="hour">Dernière heure</option>
     <option value="day" selected>Dernier jour</option>
     <option value="week">Dernière semaine</option>
@@ -58,82 +67,62 @@ https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2</script>
   <div id="status"></div>
 
   <div id="chartContainer">
-    <canvas id="chartCanvas"></canvas>
+    <canvas id="chart"></canvas>
   </div>
 
   <br>
-  <button id="logoutBtn">Déconnexion</button>
+  <button onclick="logout()">Déconnexion</button>
 </div>
 
 <script>
 /* ================= SUPABASE ================= */
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
-const SUPABASE_ANON_KEY = "TA_CLE_ANON_ICI";
-
-const supabaseClient = supabase.createClient(
-  SUPABASE_URL,
-  SUPABASE_ANON_KEY
-);
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /* ================= STATE ================= */
 let currentUser = null;
-let chartInstance = null;
-let allMesures = [];
-const PAGE_SIZE = 1000;
-const MAX_POINTS = 10000;
+let chart = null;
+let devicesCache = [];
 
 /* ================= AUTH ================= */
-loginBtn.onclick = async () => {
+async function login() {
   const email = emailInput.value.trim();
   if (!email) return;
   const { error } = await supabaseClient.auth.signInWithOtp({ email });
-  loginStatus.textContent = error
-    ? error.message
-    : "✅ Email envoyé (Magic Link)";
-};
+  loginStatus.textContent = error ? error.message : "✅ Email envoyé";
+}
 
-logoutBtn.onclick = async () => {
+async function logout() {
   await supabaseClient.auth.signOut();
   location.reload();
-};
+}
 
-supabaseClient.auth.onAuthStateChange((_event, session) => {
-  if (session?.user && !currentUser) {
-    onLogin(session.user);
-  }
-});
-
-/* ================= INIT ================= */
-async function init() {
+/* ================= INIT AUTH ================= */
+async function initAuth() {
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (session?.user) {
-    onLogin(session.user);
+    currentUser = session.user;
+    loginBox.style.display = "none";
+    dashboard.style.display = "block";
+    await loadDevices(currentUser.id);
   }
 }
+supabaseClient.auth.onAuthStateChange((event) => {
+  if (event === "SIGNED_OUT") location.reload();
+});
 
-/* ================= ON LOGIN ================= */
-async function onLogin(user) {
-  currentUser = user;
-  loginBox.style.display = "none";
-  dashboard.style.display = "block";
-  await loadDevices();
-}
-
-/* ================= DEVICES ================= */
-async function loadDevices() {
-  const { data, error } = await supabaseClient
+/* ================= LOAD DEVICES ================= */
+async function loadDevices(userId) {
+  deviceSelect.innerHTML = "";
+  const { data } = await supabaseClient
     .from("devices")
     .select("device_id, name")
-    .eq("user_id", currentUser.id)
+    .eq("user_id", userId)
     .order("created_at");
 
-  if (error || !data?.length) {
-    status.textContent = "Aucun module";
-    return;
-  }
-
-  deviceSelect.innerHTML = "";
-  data.forEach(d => {
+  devicesCache = data || [];
+  devicesCache.forEach(d => {
     const opt = document.createElement("option");
     opt.value = d.device_id;
     opt.textContent = d.name || d.device_id;
@@ -141,44 +130,33 @@ async function loadDevices() {
   });
 
   deviceSelect.onchange = () => loadCurve(deviceSelect.value);
-  loadCurve(data[0].device_id);
+  if (devicesCache.length) loadCurve(devicesCache[0].device_id);
 }
 
-/* ================= LOAD CURVE (PAGINATION) ================= */
+/* ================= LOAD CURVE ================= */
 async function loadCurve(deviceId) {
   status.textContent = "⏳ Chargement...";
-  allMesures = [];
-  let from = 0;
+  chartContainer.style.display = "block";
 
-  while (allMesures.length < MAX_POINTS) {
-    const { data } = await supabaseClient
-      .from("mesures")
-      .select("timestamp, humidity, threshold")
-      .eq("device_id", deviceId)
-      .order("timestamp")
-      .range(from, from + PAGE_SIZE - 1);
+  const { data: mesures, error } = await supabaseClient
+    .from("mesures")
+    .select("timestamp, humidity, threshold")
+    .eq("device_id", deviceId)
+    .order("timestamp")
+    .range(0, 9999);   // ✅ CORRECTION CRITIQUE
 
-    if (!data || data.length === 0) break;
-
-    allMesures.push(...data);
-    if (data.length < PAGE_SIZE) break;
-    from += PAGE_SIZE;
+  if (error || !mesures || mesures.length === 0) {
+    status.textContent = "⚠️ Aucune donnée";
+    chartContainer.style.display = "none";
+    return;
   }
 
-  status.textContent = `✅ ${allMesures.length} points chargés`;
-  drawChart();
-}
+  const h = mesures.map(m => ({ x: new Date(m.timestamp), y: m.humidity }));
+  const t = mesures.map(m => ({ x: new Date(m.timestamp), y: m.threshold }));
 
-/* ================= CHART ================= */
-function drawChart() {
-  const h = allMesures.map(m => ({ x: new Date(m.timestamp), y: m.humidity }));
-  const t = allMesures.map(m => ({ x: new Date(m.timestamp), y: m.threshold }));
+  if (chart) chart.destroy();
 
-  if (chartInstance) chartInstance.destroy();
-
-  const ctx = document.getElementById("chartCanvas").getContext("2d");
-
-  chartInstance = new Chart(ctx, {
+  chart = new Chart(document.getElementById("chart"), {
     type: "line",
     data: {
       datasets: [
@@ -197,29 +175,25 @@ function drawChart() {
   });
 
   applyTimeScale();
+  status.textContent = `✅ ${mesures.length} points chargés`;
 }
 
 /* ================= TIME SCALE ================= */
-timeScale.onchange = applyTimeScale;
-
 function applyTimeScale() {
-  if (!chartInstance) return;
-
+  if (!chart) return;
   const now = new Date();
-  let start;
-  switch (timeScale.value) {
-    case "hour":  start = new Date(now - 3600000); break;
-    case "day":   start = new Date(now - 86400000); break;
-    case "week":  start = new Date(now - 7 * 86400000); break;
-    case "month": start = new Date(now - 30 * 86400000); break;
-  }
+  let start = new Date(now - 86400000);
+  if (timeScale.value === "hour") start = new Date(now - 3600000);
+  if (timeScale.value === "week") start = new Date(now - 7*86400000);
+  if (timeScale.value === "month") start = new Date(now - 30*86400000);
 
-  chartInstance.options.scales.x.min = start;
-  chartInstance.options.scales.x.max = now;
-  chartInstance.update();
+  chart.options.scales.x.min = start;
+  chart.options.scales.x.max = now;
+  chart.update();
 }
 
-init();
+/* ================= START ================= */
+initAuth();
 </script>
 
 </body>
