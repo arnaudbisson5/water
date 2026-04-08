@@ -29,11 +29,8 @@
   #status { margin-top: 20px; font-weight: bold; }
 </style>
 
-<!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
-
-<!-- Supabase JS v2 -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 
@@ -41,7 +38,6 @@
 
 <h1>🌱 Jardin en Eau</h1>
 
-<!-- LOGIN -->
 <div id="loginBox">
   <h2>Connexion</h2>
   <input id="emailInput" type="email" placeholder="email@example.com" style="width:90%">
@@ -50,19 +46,13 @@
   <p id="loginStatus"></p>
 </div>
 
-<!-- DASHBOARD -->
 <div id="dashboard">
 
   <p><strong>Module :</strong></p>
   <select id="deviceSelect"></select>
 
-  <!-- RENOMMAGE MODULE -->
   <div style="margin-top:10px;">
-    <input
-      id="deviceNameInput"
-      placeholder="Nom du module"
-      style="width:220px"
-    >
+    <input id="deviceNameInput" placeholder="Nom du module" style="width:220px">
     <button onclick="renameDevice()">✏️ Renommer</button>
   </div>
 
@@ -88,11 +78,7 @@
 /* ================= SUPABASE ================= */
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
-
-const supabaseClient = supabase.createClient(
-  SUPABASE_URL,
-  SUPABASE_ANON_KEY
-);
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /* ================= STATE ================= */
 let currentUser = null;
@@ -103,7 +89,6 @@ let devicesCache = [];
 async function login() {
   const email = emailInput.value.trim();
   if (!email) return;
-
   const { error } = await supabaseClient.auth.signInWithOtp({ email });
   loginStatus.textContent = error ? error.message : "✅ Email envoyé";
 }
@@ -116,80 +101,36 @@ async function logout() {
 /* ================= INIT AUTH ================= */
 async function initAuth() {
   const { data: { session } } = await supabaseClient.auth.getSession();
-
-  if (session && session.user) {
+  if (session?.user) {
     currentUser = session.user;
     loginBox.style.display = "none";
     dashboard.style.display = "block";
     await loadDevices(currentUser.id);
-  } else {
-    loginBox.style.display = "block";
-    dashboard.style.display = "none";
   }
 }
-
 supabaseClient.auth.onAuthStateChange((event) => {
-  if (event === "SIGNED_OUT") {
-    location.reload();
-  }
+  if (event === "SIGNED_OUT") location.reload();
 });
 
 /* ================= LOAD DEVICES ================= */
 async function loadDevices(userId) {
   deviceSelect.innerHTML = "";
-
-  const { data, error } = await supabaseClient
+  const { data } = await supabaseClient
     .from("devices")
     .select("device_id, name")
     .eq("user_id", userId)
     .order("created_at");
 
-  if (error || !data || data.length === 0) {
-    status.textContent = "Aucun module";
-    return;
-  }
-
-  devicesCache = data;
-
-  data.forEach(d => {
+  devicesCache = data || [];
+  devicesCache.forEach(d => {
     const opt = document.createElement("option");
     opt.value = d.device_id;
     opt.textContent = d.name || d.device_id;
     deviceSelect.appendChild(opt);
   });
 
-  deviceSelect.onchange = () => {
-    const d = devicesCache.find(x => x.device_id === deviceSelect.value);
-    deviceNameInput.value = d?.name || "";
-    loadCurve(deviceSelect.value);
-  };
-
-  deviceSelect.value = data[0].device_id;
-  deviceNameInput.value = data[0].name || "";
-  loadCurve(data[0].device_id);
-}
-
-/* ================= RENAME DEVICE ================= */
-async function renameDevice() {
-  const deviceId = deviceSelect.value;
-  const newName = deviceNameInput.value.trim();
-  if (!newName) return alert("Nom invalide");
-
-  const { error } = await supabaseClient
-    .from("devices")
-    .update({ name: newName })
-    .eq("device_id", deviceId);
-
-  if (error) {
-    alert("Erreur renommage : " + error.message);
-    return;
-  }
-
-  deviceSelect.selectedOptions[0].textContent = newName;
-  const d = devicesCache.find(x => x.device_id === deviceId);
-  if (d) d.name = newName;
-
-  alert("✅ Nom du module mis à jour");
+  deviceSelect.onchange = () => loadCurve(deviceSelect.value);
+  if (devicesCache.length) loadCurve(devicesCache[0].device_id);
 }
 
 /* ================= LOAD CURVE ================= */
@@ -201,9 +142,10 @@ async function loadCurve(deviceId) {
     .from("mesures")
     .select("timestamp, humidity, threshold")
     .eq("device_id", deviceId)
-    .order("timestamp");
+    .order("timestamp")
+    .limit(10000);   // ✅ EXTENSION À 10 000 POINTS
 
-  if (error || !mesures || mesures.length === 0) {
+  if (error || !mesures?.length) {
     status.textContent = "⚠️ Aucune donnée";
     chartContainer.style.display = "none";
     return;
@@ -233,43 +175,20 @@ async function loadCurve(deviceId) {
   });
 
   applyTimeScale();
-  status.textContent = "✅ Courbe affichée";
+  status.textContent = `✅ ${mesures.length} points chargés`;
 }
 
 /* ================= TIME SCALE ================= */
-function floorToTenMinutes(d) {
-  const x = new Date(d);
-  x.setMinutes(Math.floor(x.getMinutes() / 10) * 10, 0, 0);
-  return x;
-}
-
 function applyTimeScale() {
   if (!chart) return;
-
-  const scale = timeScale.value;
   const now = new Date();
-  let start, end = now;
-
-  chart.options.scales.x.time.unit = undefined;
-  chart.options.scales.x.ticks = {};
-
-  if (scale === "hour") {
-    end = floorToTenMinutes(now);
-    start = new Date(end.getTime() - 3600000);
-    chart.options.scales.x.time.unit = "minute";
-    chart.options.scales.x.ticks.stepSize = 10;
-  }
-  if (scale === "day") start = new Date(now - 86400000);
-  if (scale === "week") {
-    start = new Date(now);
-    start.setDate(start.getDate() - 6);
-    start.setHours(0,0,0,0);
-    chart.options.scales.x.time.unit = "day";
-  }
-  if (scale === "month") start = new Date(now - 30 * 86400000);
+  let start = new Date(now - 86400000);
+  if (timeScale.value === "hour") start = new Date(now - 3600000);
+  if (timeScale.value === "week") start = new Date(now - 7*86400000);
+  if (timeScale.value === "month") start = new Date(now - 30*86400000);
 
   chart.options.scales.x.min = start;
-  chart.options.scales.x.max = end;
+  chart.options.scales.x.max = now;
   chart.update();
 }
 
