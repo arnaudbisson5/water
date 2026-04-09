@@ -26,7 +26,10 @@
     margin-top: 40px;
     display: none;
   }
-  #status { margin-top: 20px; font-weight: bold; }
+  #status, #thresholdStatus {
+    margin-top: 15px;
+    font-weight: bold;
+  }
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -55,6 +58,21 @@
     <input id="deviceNameInput" placeholder="Nom du module" style="width:220px">
     <button onclick="renameDevice()">✏️ Renommer</button>
   </div>
+
+  <!-- ✅ NOUVELLE SECTION SEUIL -->
+  <h2>🎚️ Consigne de seuil</h2>
+  <div>
+    <input
+      id="thresholdInput"
+      type="number"
+      min="0"
+      max="100"
+      placeholder="Seuil (%)"
+      style="width:120px"
+    >
+    <button onclick="sendThreshold()">📤 Envoyer</button>
+  </div>
+  <div id="thresholdStatus"></div>
 
   <h2>⏱️ Échelle de temps</h2>
   <select id="timeScale" onchange="applyTimeScale()">
@@ -117,11 +135,12 @@ async function loadDevices(userId) {
   deviceSelect.innerHTML = "";
   const { data } = await supabaseClient
     .from("devices")
-    .select("device_id, name")
+    .select("device_id, name, threshold")
     .eq("user_id", userId)
     .order("created_at");
 
   devicesCache = data || [];
+
   devicesCache.forEach(d => {
     const opt = document.createElement("option");
     opt.value = d.device_id;
@@ -130,7 +149,38 @@ async function loadDevices(userId) {
   });
 
   deviceSelect.onchange = () => loadCurve(deviceSelect.value);
-  if (devicesCache.length) loadCurve(devicesCache[0].device_id);
+
+  if (devicesCache.length) {
+    thresholdInput.value = devicesCache[0].threshold ?? "";
+    loadCurve(devicesCache[0].device_id);
+  }
+}
+
+/* ================= ENVOI DU SEUIL ================= */
+async function sendThreshold() {
+  const value = Number(thresholdInput.value);
+  const deviceId = deviceSelect.value;
+
+  if (isNaN(value) || value < 0 || value > 100) {
+    thresholdStatus.textContent = "❌ Valeur invalide (0–100)";
+    return;
+  }
+
+  thresholdStatus.textContent = "⏳ Envoi de la consigne...";
+
+  const { error } = await supabaseClient
+    .from("devices")
+    .update({ threshold: value })
+    .eq("device_id", deviceId)
+    .eq("user_id", currentUser.id);
+
+  if (error) {
+    thresholdStatus.textContent = "❌ Erreur lors de l'envoi";
+    console.error(error);
+  } else {
+    thresholdStatus.textContent = `✅ Seuil mis à jour (${value}%)`;
+    loadCurve(deviceId);
+  }
 }
 
 /* ================= LOAD CURVE ================= */
@@ -138,36 +188,20 @@ async function loadCurve(deviceId) {
   status.textContent = "⏳ Chargement...";
   chartContainer.style.display = "block";
 
-  const PAGE_SIZE = 1000;
-  const MAX_POINTS = 10000;
+  const { data } = await supabaseClient
+    .from("mesures")
+    .select("timestamp, humidity, threshold")
+    .eq("device_id", deviceId)
+    .order("timestamp");
 
-  let mesures = [];
-  let from = 0;
-
-  while (mesures.length < MAX_POINTS) {
-    const { data, error } = await supabaseClient
-      .from("mesures")
-      .select("timestamp, humidity, threshold")
-      .eq("device_id", deviceId)
-      .order("timestamp")
-      .range(from, from + PAGE_SIZE - 1);
-
-    if (error || !data || data.length === 0) break;
-
-    mesures = mesures.concat(data);
-
-    if (data.length < PAGE_SIZE) break;
-    from += PAGE_SIZE;
-  }
-
-  if (mesures.length === 0) {
+  if (!data || !data.length) {
     status.textContent = "⚠️ Aucune donnée";
     chartContainer.style.display = "none";
     return;
   }
 
-  const h = mesures.map(m => ({ x: new Date(m.timestamp), y: m.humidity }));
-  const t = mesures.map(m => ({ x: new Date(m.timestamp), y: m.threshold }));
+  const h = data.map(m => ({ x: new Date(m.timestamp), y: m.humidity }));
+  const t = data.map(m => ({ x: new Date(m.timestamp), y: m.threshold }));
 
   if (chart) chart.destroy();
 
@@ -190,16 +224,17 @@ async function loadCurve(deviceId) {
   });
 
   applyTimeScale();
-  status.textContent = `✅ ${mesures.length} points chargés`;
+  status.textContent = `✅ ${data.length} points`;
 }
+
 /* ================= TIME SCALE ================= */
 function applyTimeScale() {
   if (!chart) return;
   const now = new Date();
   let start = new Date(now - 86400000);
   if (timeScale.value === "hour") start = new Date(now - 3600000);
-  if (timeScale.value === "week") start = new Date(now - 7*86400000);
-  if (timeScale.value === "month") start = new Date(now - 30*86400000);
+  if (timeScale.value === "week") start = new Date(now - 7 * 86400000);
+  if (timeScale.value === "month") start = new Date(now - 30 * 86400000);
 
   chart.options.scales.x.min = start;
   chart.options.scales.x.max = now;
