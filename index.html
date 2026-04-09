@@ -113,6 +113,37 @@ async function logout() {
   location.reload();
 }
 
+  
+/* ================= SEND THRESHOLD ================= */
+async function sendThreshold() {
+  const value = Number(document.getElementById("thresholdInput").value);
+  const deviceId = document.getElementById("deviceSelect").value;
+
+  if (isNaN(value) || value < 0 || value > 100) {
+    thresholdStatus.textContent = "❌ Valeur invalide (0–100)";
+    return;
+  }
+
+  thresholdStatus.textContent = "⏳ Envoi de la consigne...";
+
+  const { error } = await supabaseClient
+    .from("actions")
+    .insert({
+      device_id: deviceId,
+      action: "set_threshold",
+      threshold: value,
+      user_id: currentUser.id
+    });
+
+  if (error) {
+    thresholdStatus.textContent = "❌ Erreur lors de l'envoi";
+    console.error(error);
+  } else {
+    thresholdStatus.textContent = `✅ Consigne envoyée (seuil = ${value}%)`;
+  }
+}
+
+  
 /* ================= INIT AUTH ================= */
 async function initAuth() {
   const { data: { session } } = await supabaseClient.auth.getSession();
