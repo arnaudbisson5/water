@@ -32,15 +32,14 @@
   }
 </style>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-</head>
-
-<body>
+<!-- ✅ SCRIPTS OBLIGATOIRES -->
+https://cdn.jsdelivr.net/npm/chart.js
+https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-jsbody>
 
 <h1>🌱 Jardin en Eau</h1>
 
+<!-- ✅ LOGIN -->
 <div id="loginBox">
   <h2>Connexion</h2>
   <input id="emailInput" type="email" placeholder="email@example.com" style="width:90%">
@@ -49,17 +48,13 @@
   <p id="loginStatus"></p>
 </div>
 
+<!-- ✅ DASHBOARD -->
 <div id="dashboard">
 
   <p><strong>Module :</strong></p>
   <select id="deviceSelect"></select>
 
-  <div style="margin-top:10px;">
-    <input id="deviceNameInput" placeholder="Nom du module" style="width:220px">
-    <button onclick="renameDevice()">✏️ Renommer</button>
-  </div>
-
-  <!-- ✅ NOUVELLE SECTION SEUIL -->
+  <!-- ✅ SEUIL -->
   <h2>🎚️ Consigne de seuil</h2>
   <div>
     <input
@@ -74,6 +69,7 @@
   </div>
   <div id="thresholdStatus"></div>
 
+  <!-- ✅ TEMPS -->
   <h2>⏱️ Échelle de temps</h2>
   <select id="timeScale" onchange="applyTimeScale()">
     <option value="hour">Dernière heure</option>
@@ -84,6 +80,7 @@
 
   <div id="status"></div>
 
+  <!-- ✅ GRAPHE -->
   <div id="chartContainer">
     <canvas id="chart"></canvas>
   </div>
@@ -95,13 +92,12 @@
 <script>
 /* ================= SUPABASE ================= */
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
+const SUPABASE_ANON_KEY = "💡COLLE_TA_CLE_ANON_ICI";
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /* ================= STATE ================= */
 let currentUser = null;
 let chart = null;
-let devicesCache = [];
 
 /* ================= AUTH ================= */
 async function login() {
@@ -116,32 +112,32 @@ async function logout() {
   location.reload();
 }
 
-/* ================= INIT AUTH ================= */
 async function initAuth() {
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (session?.user) {
     currentUser = session.user;
     loginBox.style.display = "none";
     dashboard.style.display = "block";
-    await loadDevices(currentUser.id);
+    loadDevices();
   }
 }
-supabaseClient.auth.onAuthStateChange((event) => {
-  if (event === "SIGNED_OUT") location.reload();
-});
+supabaseClient.auth.onAuthStateChange(() => location.reload());
 
-/* ================= LOAD DEVICES ================= */
-async function loadDevices(userId) {
+/* ================= DEVICES ================= */
+async function loadDevices() {
   deviceSelect.innerHTML = "";
-  const { data } = await supabaseClient
+
+  const { data, error } = await supabaseClient
     .from("devices")
     .select("device_id, name, threshold")
-    .eq("user_id", userId)
-    .order("created_at");
+    .eq("user_id", currentUser.id);
 
-  devicesCache = data || [];
+  if (error || !data.length) {
+    status.textContent = "❌ Aucun module";
+    return;
+  }
 
-  devicesCache.forEach(d => {
+  data.forEach(d => {
     const opt = document.createElement("option");
     opt.value = d.device_id;
     opt.textContent = d.name || d.device_id;
@@ -149,14 +145,11 @@ async function loadDevices(userId) {
   });
 
   deviceSelect.onchange = () => loadCurve(deviceSelect.value);
-
-  if (devicesCache.length) {
-    thresholdInput.value = devicesCache[0].threshold ?? "";
-    loadCurve(devicesCache[0].device_id);
-  }
+  thresholdInput.value = data[0].threshold ?? "";
+  loadCurve(data[0].device_id);
 }
 
-/* ================= ENVOI DU SEUIL ================= */
+/* ================= SEND THRESHOLD ================= */
 async function sendThreshold() {
   const value = Number(thresholdInput.value);
   const deviceId = deviceSelect.value;
@@ -166,28 +159,21 @@ async function sendThreshold() {
     return;
   }
 
-  thresholdStatus.textContent = "⏳ Envoi de la consigne...";
-
   const { error } = await supabaseClient
     .from("devices")
     .update({ threshold: value })
     .eq("device_id", deviceId)
     .eq("user_id", currentUser.id);
 
-  if (error) {
-    thresholdStatus.textContent = "❌ Erreur lors de l'envoi";
-    console.error(error);
-  } else {
-    thresholdStatus.textContent = `✅ Seuil mis à jour (${value}%)`;
-    loadCurve(deviceId);
-  }
+  thresholdStatus.textContent = error
+    ? "❌ Erreur d'envoi"
+    : `✅ Seuil envoyé (${value}%)`;
+
+  if (!error) loadCurve(deviceId);
 }
 
-/* ================= LOAD CURVE ================= */
+/* ================= CURVE ================= */
 async function loadCurve(deviceId) {
-  status.textContent = "⏳ Chargement...";
-  chartContainer.style.display = "block";
-
   const { data } = await supabaseClient
     .from("mesures")
     .select("timestamp, humidity, threshold")
@@ -195,17 +181,19 @@ async function loadCurve(deviceId) {
     .order("timestamp");
 
   if (!data || !data.length) {
-    status.textContent = "⚠️ Aucune donnée";
+    status.textContent = "⚠️ Pas de données";
     chartContainer.style.display = "none";
     return;
   }
+
+  chartContainer.style.display = "block";
+  status.textContent = `✅ ${data.length} points`;
 
   const h = data.map(m => ({ x: new Date(m.timestamp), y: m.humidity }));
   const t = data.map(m => ({ x: new Date(m.timestamp), y: m.threshold }));
 
   if (chart) chart.destroy();
-
-  chart = new Chart(document.getElementById("chart"), {
+  chart = new Chart(chart, {
     type: "line",
     data: {
       datasets: [
@@ -215,7 +203,6 @@ async function loadCurve(deviceId) {
     },
     options: {
       parsing: false,
-      responsive: true,
       scales: {
         x: { type: "time" },
         y: { min: 0, max: 100 }
@@ -224,19 +211,17 @@ async function loadCurve(deviceId) {
   });
 
   applyTimeScale();
-  status.textContent = `✅ ${data.length} points`;
 }
 
-/* ================= TIME SCALE ================= */
+/* ================= TIME ================= */
 function applyTimeScale() {
   if (!chart) return;
   const now = new Date();
-  let start = new Date(now - 86400000);
-  if (timeScale.value === "hour") start = new Date(now - 3600000);
-  if (timeScale.value === "week") start = new Date(now - 7 * 86400000);
-  if (timeScale.value === "month") start = new Date(now - 30 * 86400000);
-
-  chart.options.scales.x.min = start;
+  let delta = 86400000;
+  if (timeScale.value === "hour") delta = 3600000;
+  if (timeScale.value === "week") delta = 7 * 86400000;
+  if (timeScale.value === "month") delta = 30 * 86400000;
+  chart.options.scales.x.min = new Date(now - delta);
   chart.options.scales.x.max = now;
   chart.update();
 }
