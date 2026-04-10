@@ -8,122 +8,124 @@
     body {
       font-family: Arial, sans-serif;
       padding: 2rem;
-      max-width: 400px;
+      max-width: 420px;
       margin: auto;
     }
-    button {
-      display: block;
+    input, button {
       width: 100%;
-      padding: 0.8rem;
+      padding: 0.7rem;
       margin-top: 1rem;
       font-size: 1rem;
     }
-    input {
-      width: 100%;
-      padding: 0.6rem;
-      margin-top: 1rem;
-      font-size: 1rem;
-    }
-    .hidden {
-      display: none;
-    }
+    .hidden { display: none; }
   </style>
 </head>
 <body>
 
-  <h1>🌱 PlanteZen</h1>
+<h1>🌱 PlanteZen</h1>
 
-  <!-- LOGIN -->
-  <button id="loginBtn">🔐 Se connecter</button>
+<!-- LOGIN -->
+<div id="loginSection">
+  <input
+    id="emailInput"
+    type="email"
+    placeholder="Votre email"
+  />
+  <button id="loginBtn">📩 Recevoir le lien</button>
+</div>
 
-  <!-- ASSOCIATION DEVICE -->
-  <div id="deviceSection" class="hidden">
-    <input
-      id="deviceId"
-      type="text"
-      placeholder="ID du device (ex: B483A21F8A3C)"
-    />
-    <button id="claimBtn">➕ Associer ce device</button>
-    <button id="logoutBtn">🚪 Se déconnecter</button>
-  </div>
+<!-- DEVICE -->
+<div id="deviceSection" class="hidden">
+  <input
+    id="deviceId"
+    type="text"
+    placeholder="ID du device (ex: B483A21F8A3C)"
+  />
+  <button id="claimBtn">➕ Associer ce device</button>
+  <button id="logoutBtn">🚪 Se déconnecter</button>
+</div>
 
-  <!-- SCRIPT -->
-  <script type="module">
-    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+<script type="module">
+  import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
 
-    /* ✅ CONFIG SUPABASE */
-    const supabaseUrl = "https://pbciwmsuhaniokugzqhr.supabase.co";
-    const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo"; // ← mets ta clé ici
+  const supabase = createClient(
+    "https://pbciwmsuhaniokugzqhr.supabase.co",
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo"   // ⛔ remplace par TA clé publique
+  );
 
-    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+  const loginBtn = document.getElementById("loginBtn");
+  const emailInput = document.getElementById("emailInput");
+  const loginSection = document.getElementById("loginSection");
 
-    /* ✅ UI ELEMENTS */
-    const loginBtn = document.getElementById("loginBtn");
-    const logoutBtn = document.getElementById("logoutBtn");
-    const claimBtn = document.getElementById("claimBtn");
-    const deviceSection = document.getElementById("deviceSection");
-    const deviceIdInput = document.getElementById("deviceId");
+  const deviceSection = document.getElementById("deviceSection");
+  const claimBtn = document.getElementById("claimBtn");
+  const deviceIdInput = document.getElementById("deviceId");
+  const logoutBtn = document.getElementById("logoutBtn");
 
-    /* ✅ AUTH STATE */
-    const updateUI = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        loginBtn.classList.add("hidden");
-        deviceSection.classList.remove("hidden");
-      } else {
-        loginBtn.classList.remove("hidden");
-        deviceSection.classList.add("hidden");
-      }
-    };
+  async function updateUI() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      loginSection.classList.add("hidden");
+      deviceSection.classList.remove("hidden");
+    } else {
+      loginSection.classList.remove("hidden");
+      deviceSection.classList.add("hidden");
+    }
+  }
 
-    /* ✅ LOGIN */
-    loginBtn.addEventListener("click", async () => {
-      await supabase.auth.signInWithOAuth({
-        provider: "github" // change si besoin
-      });
-    });
+  // ✅ MAGIC LINK
+  loginBtn.addEventListener("click", async () => {
+    const email = emailInput.value.trim();
+    if (!email) {
+      alert("Entre un email");
+      return;
+    }
 
-    /* ✅ LOGOUT */
-    logoutBtn.addEventListener("click", async () => {
-      await supabase.auth.signOut();
-      updateUI();
-    });
-
-    /* ✅ ASSOCIER DEVICE */
-    claimBtn.addEventListener("click", async () => {
-      const deviceId = deviceIdInput.value.trim();
-
-      if (!deviceId) {
-        alert("Veuillez entrer un ID de device");
-        return;
-      }
-
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        alert("Vous devez être connecté");
-        return;
-      }
-
-      const { error } = await supabase
-        .from("devices")
-        .update({ user_id: user.id })
-        .eq("id", deviceId)
-        .is("user_id", null);
-
-      if (error) {
-        alert("❌ " + error.message);
-      } else {
-        alert("✅ Device associé à votre compte !");
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: window.location.origin
       }
     });
 
-    /* ✅ INIT */
+    if (error) {
+      alert("❌ " + error.message);
+    } else {
+      alert("📩 Lien envoyé ! Vérifie ta boîte mail.");
+    }
+  });
+
+  // ✅ ASSOCIER DEVICE
+  claimBtn.addEventListener("click", async () => {
+    const deviceId = deviceIdInput.value.trim();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!deviceId || !user) {
+      alert("Erreur device ou utilisateur");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("devices")
+      .update({ user_id: user.id })
+      .eq("id", deviceId)
+      .is("user_id", null);
+
+    if (error) {
+      alert("❌ " + error.message);
+    } else {
+      alert("✅ Device associé !");
+    }
+  });
+
+  logoutBtn.addEventListener("click", async () => {
+    await supabase.auth.signOut();
     updateUI();
+  });
 
-    supabase.auth.onAuthStateChange(() => {
-      updateUI();
-    });
-  </script>
+  updateUI();
+  supabase.auth.onAuthStateChange(updateUI);
+</script>
 
 </body>
 </html>
