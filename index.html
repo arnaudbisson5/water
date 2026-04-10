@@ -46,6 +46,24 @@
 </div>
 
 <script type="module">
+
+supabase.auth.onAuthStateChange(async (event, session) => {
+  if (event === "SIGNED_IN") {
+    const user = session.user;
+
+    await supabase
+      .from("devices")
+      .update({
+        user_id: user.id,
+        pending_email: null,
+      })
+      .eq("pending_email", user.email);
+
+    console.log("✅ Devices associés automatiquement");
+  }
+});
+
+  
   
   console.log("✅ Script chargé");
   
