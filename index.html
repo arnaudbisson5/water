@@ -1,42 +1,129 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <title>Configuration du module</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <meta charset="UTF-8" />
+  <title>PlanteZen</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 2rem;
+      max-width: 400px;
+      margin: auto;
+    }
+    button {
+      display: block;
+      width: 100%;
+      padding: 0.8rem;
+      margin-top: 1rem;
+      font-size: 1rem;
+    }
+    input {
+      width: 100%;
+      padding: 0.6rem;
+      margin-top: 1rem;
+      font-size: 1rem;
+    }
+    .hidden {
+      display: none;
+    }
+  </style>
 </head>
 <body>
-  <h2>Configurer votre module</h2>
-  <input id="email" type="email" placeholder="email@example.com">
-  <button onclick="login()">Recevoir le lien</button>
-  <p id="status"></p>
 
-<script>
-const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
-const DEVICE_ID = "ESP32_DEVICE_ID";
-const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  <h1>🌱 PlanteZen</h1>
 
-async function login() {
-  const email = document.getElementById("email").value;
-  if (!email) return;
-  await supabase.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: window.location.href }
-  });
-}
+  <!-- LOGIN -->
+  <button id="loginBtn">🔐 Se connecter</button>
 
-supabase.auth.onAuthStateChange(async (event, session) => {
-  if (event === "SIGNED_IN") {
-    await supabase.from("devices").insert({
-      device_id: DEVICE_ID,
-      user_id: session.user.id,
-      name: "Mon module",
-      claimed: true
+  <!-- ASSOCIATION DEVICE -->
+  <div id="deviceSection" class="hidden">
+    <input
+      id="deviceId"
+      type="text"
+      placeholder="ID du device (ex: B483A21F8A3C)"
+    />
+    <button id="claimBtn">➕ Associer ce device</button>
+    <button id="logoutBtn">🚪 Se déconnecter</button>
+  </div>
+
+  <!-- SCRIPT -->
+  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+    /* ✅ CONFIG SUPABASE */
+    const supabaseUrl = "https://pbciwmsuhaniokugzqhr.supabase.co";
+    const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo"; // ← mets ta clé ici
+
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+    /* ✅ UI ELEMENTS */
+    const loginBtn = document.getElementById("loginBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const claimBtn = document.getElementById("claimBtn");
+    const deviceSection = document.getElementById("deviceSection");
+    const deviceIdInput = document.getElementById("deviceId");
+
+    /* ✅ AUTH STATE */
+    const updateUI = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        loginBtn.classList.add("hidden");
+        deviceSection.classList.remove("hidden");
+      } else {
+        loginBtn.classList.remove("hidden");
+        deviceSection.classList.add("hidden");
+      }
+    };
+
+    /* ✅ LOGIN */
+    loginBtn.addEventListener("click", async () => {
+      await supabase.auth.signInWithOAuth({
+        provider: "github" // change si besoin
+      });
     });
-    document.getElementById("status").innerText = "Module associé.";
-  }
-});
-</script>
+
+    /* ✅ LOGOUT */
+    logoutBtn.addEventListener("click", async () => {
+      await supabase.auth.signOut();
+      updateUI();
+    });
+
+    /* ✅ ASSOCIER DEVICE */
+    claimBtn.addEventListener("click", async () => {
+      const deviceId = deviceIdInput.value.trim();
+
+      if (!deviceId) {
+        alert("Veuillez entrer un ID de device");
+        return;
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        alert("Vous devez être connecté");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("devices")
+        .update({ user_id: user.id })
+        .eq("id", deviceId)
+        .is("user_id", null);
+
+      if (error) {
+        alert("❌ " + error.message);
+      } else {
+        alert("✅ Device associé à votre compte !");
+      }
+    });
+
+    /* ✅ INIT */
+    updateUI();
+
+    supabase.auth.onAuthStateChange(() => {
+      updateUI();
+    });
+  </script>
+
 </body>
 </html>
