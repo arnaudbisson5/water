@@ -46,6 +46,13 @@
 </div>
 
 <script type="module">
+  
+  console.log("✅ Script chargé");
+  
+  window.addEventListener("error", (e) => {
+    console.error("❌ Erreur JS globale:", e.message);
+  });
+
   import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
 
   const supabase = createClient(
