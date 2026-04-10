@@ -7,9 +7,10 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-      padding: 2rem;
       max-width: 420px;
       margin: auto;
+      padding: 2rem;
+      text-align: center;
     }
     input, button {
       width: 100%;
@@ -17,140 +18,116 @@
       margin-top: 1rem;
       font-size: 1rem;
     }
-    .hidden { display: none; }
+    .hidden {
+      display: none;
+    }
   </style>
 </head>
 <body>
 
-<h1>🌱 PlanteZen</h1>
+  <h1>🌱 PlanteZen</h1>
+  <p>Connectez‑vous pour voir vos modules.</p>
 
-<!-- LOGIN -->
-<div id="loginSection">
-  <input
-    id="emailInput"
-    type="email"
-    placeholder="Votre email"
-  />
-  <button id="loginBtn">📩 Recevoir le lien</button>
-</div>
+  <!-- LOGIN -->
+  <div id="loginSection">
+    <input
+      id="emailInput"
+      type="email"
+      placeholder="Votre email"
+    />
+    <button id="loginBtn">📩 Recevoir le lien</button>
+  </div>
 
-<!-- DEVICE -->
-<div id="deviceSection" class="hidden">
-  <input
-    id="deviceId"
-    type="text"
-    placeholder="ID du device (ex: B483A21F8A3C)"
-  />
-  <button id="claimBtn">➕ Associer ce device</button>
-  <button id="logoutBtn">🚪 Se déconnecter</button>
-</div>
+  <!-- CONNECTÉ -->
+  <div id="connectedSection" class="hidden">
+    <p>✅ Vous êtes connecté</p>
+    <p id="statusMsg"></p>
+    <button id="logoutBtn">🚪 Se déconnecter</button>
+  </div>
 
-<script type="module">
+  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
 
-supabase.auth.onAuthStateChange(async (event, session) => {
-  if (event === "SIGNED_IN") {
-    const user = session.user;
+    // ✅ CONFIG SUPABASE
+    const supabase = createClient(
+      "https://pbciwmsuhaniokugzqhr.supabase.co",
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo" // ⛔ remplace par TA clé publique
+    );
 
-    await supabase
-      .from("devices")
-      .update({
-        user_id: user.id,
-        pending_email: null,
-      })
-      .eq("pending_email", user.email);
+    const emailInput = document.getElementById("emailInput");
+    const loginBtn = document.getElementById("loginBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const loginSection = document.getElementById("loginSection");
+    const connectedSection = document.getElementById("connectedSection");
+    const statusMsg = document.getElementById("statusMsg");
 
-    console.log("✅ Devices associés automatiquement");
-  }
-});
+    // ✅ MET À JOUR L’INTERFACE
+    async function updateUI() {
+      const { data: { user } } = await supabase.auth.getUser();
 
-  
-  
-  console.log("✅ Script chargé");
-  
-  window.addEventListener("error", (e) => {
-    console.error("❌ Erreur JS globale:", e.message);
-  });
+      if (user) {
+        loginSection.classList.add("hidden");
+        connectedSection.classList.remove("hidden");
 
-  import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+        // ✅ ASSOCIATION AUTOMATIQUE DES DEVICES
+        const { error } = await supabase
+          .from("devices")
+          .update({
+            user_id: user.id,
+            pending_email: null,
+          })
+          .eq("pending_email", user.email);
 
-  const supabase = createClient(
-    "https://pbciwmsuhaniokugzqhr.supabase.co",
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo"   // ⛔ remplace par TA clé publique
-  );
-
-  const loginBtn = document.getElementById("loginBtn");
-  const emailInput = document.getElementById("emailInput");
-  const loginSection = document.getElementById("loginSection");
-
-  const deviceSection = document.getElementById("deviceSection");
-  const claimBtn = document.getElementById("claimBtn");
-  const deviceIdInput = document.getElementById("deviceId");
-  const logoutBtn = document.getElementById("logoutBtn");
-
-  async function updateUI() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      loginSection.classList.add("hidden");
-      deviceSection.classList.remove("hidden");
-    } else {
-      loginSection.classList.remove("hidden");
-      deviceSection.classList.add("hidden");
-    }
-  }
-
-  // ✅ MAGIC LINK
-  loginBtn.addEventListener("click", async () => {
-    const email = emailInput.value.trim();
-    if (!email) {
-      alert("Entre un email");
-      return;
+        if (error) {
+          console.error(error);
+          statusMsg.textContent = "⚠️ Erreur lors de l’association";
+        } else {
+          statusMsg.textContent = "✅ Vos modules sont maintenant associés";
+        }
+      } else {
+        loginSection.classList.remove("hidden");
+        connectedSection.classList.add("hidden");
+        statusMsg.textContent = "";
+      }
     }
 
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: window.location.origin
+    // ✅ MAGIC LINK
+    loginBtn.addEventListener("click", async () => {
+      const email = emailInput.value.trim();
+
+      if (!email) {
+        alert("Veuillez entrer un email");
+        return;
+      }
+
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: window.location.origin,
+        },
+      });
+
+      if (error) {
+        alert("❌ " + error.message);
+      } else {
+        alert("📩 Lien envoyé ! Vérifiez vos emails.");
       }
     });
 
-    if (error) {
-      alert("❌ " + error.message);
-    } else {
-      alert("📩 Lien envoyé ! Vérifie ta boîte mail.");
-    }
-  });
+    // ✅ LOGOUT
+    logoutBtn.addEventListener("click", async () => {
+      await supabase.auth.signOut();
+      updateUI();
+    });
 
-  // ✅ ASSOCIER DEVICE
-  claimBtn.addEventListener("click", async () => {
-    const deviceId = deviceIdInput.value.trim();
-    const { data: { user } } = await supabase.auth.getUser();
+    // ✅ AUTO À CHAQUE CHANGEMENT D’AUTH
+    supabase.auth.onAuthStateChange(() => {
+      updateUI();
+    });
 
-    if (!deviceId || !user) {
-      alert("Erreur device ou utilisateur");
-      return;
-    }
-
-    const { error } = await supabase
-      .from("devices")
-      .update({ user_id: user.id })
-      .eq("id", deviceId)
-      .is("user_id", null);
-
-    if (error) {
-      alert("❌ " + error.message);
-    } else {
-      alert("✅ Device associé !");
-    }
-  });
-
-  logoutBtn.addEventListener("click", async () => {
-    await supabase.auth.signOut();
+    // ✅ INIT
     updateUI();
-  });
-
-  updateUI();
-  supabase.auth.onAuthStateChange(updateUI);
-</script>
+  </script>
 
 </body>
 </html>
