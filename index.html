@@ -70,7 +70,12 @@
   </div>
   <div id="thresholdStatus"></div>
 
+  <h2>💧 Arrosage manuel</h2>
+    <button onclick="forceWatering()">🚿 Forcer l’arrosage</button>
+    <div id="waterStatus"></div>
 
+  
+  
   <h2>⏱️ Échelle de temps</h2>
   <select id="timeScale" onchange="applyTimeScale()">
     <option value="hour">Dernière heure</option>
@@ -140,6 +145,31 @@ async function sendThreshold() {
     console.error(error);
   } else {
     thresholdStatus.textContent = `✅ Consigne envoyée (seuil = ${value}%)`;
+  }
+}
+
+/* ================= FORCE WATERING ================= */
+async function forceWatering() {
+  const deviceId = document.getElementById("deviceSelect").value;
+  if (!deviceId) return;
+
+  waterStatus.textContent = "⏳ Envoi de la commande d’arrosage...";
+
+  const { data, error } = await supabaseClient
+    .from("actions")
+    .insert({
+      device_id: deviceId,
+      action: "water",
+      user_id: currentUser.id
+    })
+    .select();
+
+  if (error) {
+    waterStatus.textContent = "❌ Erreur lors de l’envoi";
+    console.error(error);
+  } else {
+    waterStatus.textContent = "✅ Commande d’arrosage envoyée";
+    console.log("Action water créée :", data);
   }
 }
 
