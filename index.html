@@ -131,8 +131,7 @@ async function sendThreshold() {
     .insert({
       device_id: deviceId,
       action: "set_threshold",
-      threshold: value,
-      user_id: currentUser.id
+      threshold: value
     });
 
   if (error) {
