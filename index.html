@@ -133,7 +133,8 @@ async function sendThreshold() {
       action: "set_threshold",
       threshold: value
     });
-
+  .select();
+  console.log("Action insérée :", data);
   if (error) {
     thresholdStatus.textContent = "❌ Erreur lors de l'envoi";
     console.error(error);
