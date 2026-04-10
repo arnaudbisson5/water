@@ -115,13 +115,26 @@ supabaseClient.auth.onAuthStateChange(async (_, session) => {
 
 /* ================= DEVICES ================= */
 async function loadDevices() {
-  const { data } = await supabaseClient
+  deviceSelect.innerHTML = "";
+
+  const userEmail = currentUser.email;
+  console.log(currentUser.email);
+  
+  const { data, error } = await supabaseClient
     .from("devices")
-    .select("id, name")
-    .eq("user_id", currentUser.id)
+    .select("id, name, user_id")
+    .eq("pending_email", userEmail)
     .order("created_at");
 
-  deviceSelect.innerHTML = "";
+  if (error) {
+    status.textContent = error.message;
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    status.textContent = "❌ Aucun module en attente pour cet email";
+    return;
+  }
 
   data.forEach(d => {
     const opt = document.createElement("option");
@@ -131,9 +144,9 @@ async function loadDevices() {
   });
 
   deviceSelect.onchange = () => loadCurve(deviceSelect.value);
-  if (data.length) loadCurve(data[0].id);
+  loadCurve(data[0].id);
 }
-
+  
 async function renameDevice() {
   const name = deviceNameInput.value.trim();
   if (!name) return;
