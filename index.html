@@ -1,133 +1,236 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <title>PlanteZen</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      max-width: 420px;
-      margin: auto;
-      padding: 2rem;
-      text-align: center;
-    }
-    input, button {
-      width: 100%;
-      padding: 0.7rem;
-      margin-top: 1rem;
-      font-size: 1rem;
-    }
-    .hidden {
-      display: none;
-    }
-  </style>
+<meta charset="UTF-8" />
+<title>🌱 Jardin en Eau</title>
+
+<style>
+  body { font-family: Arial; margin: 30px; }
+  h1 { color: #2c7; }
+  input, button, select {
+    padding: 10px;
+    font-size: 16px;
+    margin-top: 10px;
+    margin-right: 5px;
+  }
+  #loginBox {
+    border: 2px solid #ccc;
+    padding: 20px;
+    max-width: 400px;
+    border-radius: 10px;
+  }
+  #dashboard { display: none; }
+  #chartContainer {
+    width: 100%;
+    max-width: 900px;
+    margin-top: 40px;
+  }
+  #status { margin-top: 20px; font-weight: bold; }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
+
 <body>
 
-  <h1>🌱 PlanteZen</h1>
-  <p>Connectez‑vous pour voir vos modules.</p>
+<h1>🌱 Jardin en Eau</h1>
 
-  <!-- LOGIN -->
-  <div id="loginSection">
-    <input
-      id="emailInput"
-      type="email"
-      placeholder="Votre email"
-    />
-    <button id="loginBtn">📩 Recevoir le lien</button>
+<div id="loginBox">
+  <h2>Connexion</h2>
+  <input id="emailInput" type="email" placeholder="email@example.com" style="width:90%">
+  <br>
+  <button onclick="login()">Recevoir le lien de connexion</button>
+  <p id="loginStatus"></p>
+</div>
+
+<div id="dashboard">
+
+  <h2>🔌 Module</h2>
+  <select id="deviceSelect"></select>
+
+  <div>
+    <input id="deviceNameInput" placeholder="Nom du module" style="width:220px">
+    <button onclick="renameDevice()">✏️ Renommer</button>
   </div>
 
-  <!-- CONNECTÉ -->
-  <div id="connectedSection" class="hidden">
-    <p>✅ Vous êtes connecté</p>
-    <p id="statusMsg"></p>
-    <button id="logoutBtn">🚪 Se déconnecter</button>
+  <h2>🎚️ Seuil d'humidité</h2>
+  <input id="thresholdInput" type="number" min="0" max="100" placeholder="Seuil (%)">
+  <button onclick="sendThreshold()">📤 Envoyer</button>
+  <div id="thresholdStatus"></div>
+
+  <h2>💧 Arrosage manuel</h2>
+  <button onclick="manualWater()">🚿 Arroser maintenant</button>
+
+  <h2>⏱️ Échelle de temps</h2>
+  <select id="timeScale" onchange="applyTimeScale()">
+    <option value="hour">Dernière heure</option>
+    <option value="day" selected>Dernier jour</option>
+    <option value="week">Dernière semaine</option>
+    <option value="month">Dernier mois</option>
+  </select>
+
+  <div id="status"></div>
+
+  <div id="chartContainer">
+    <canvas id="chart"></canvas>
   </div>
 
-  <script type="module">
-    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+  <br>
+  <button onclick="logout()">Déconnexion</button>
+</div>
 
-    // ✅ CONFIG SUPABASE
-    const supabase = createClient(
-      "https://pbciwmsuhaniokugzqhr.supabase.co",
-      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo" // ⛔ remplace par TA clé publique
-    );
+<script>
+/* ================= SUPABASE ================= */
+const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    const emailInput = document.getElementById("emailInput");
-    const loginBtn = document.getElementById("loginBtn");
-    const logoutBtn = document.getElementById("logoutBtn");
-    const loginSection = document.getElementById("loginSection");
-    const connectedSection = document.getElementById("connectedSection");
-    const statusMsg = document.getElementById("statusMsg");
+/* ================= STATE ================= */
+let currentUser = null;
+let chart = null;
 
-    // ✅ MET À JOUR L’INTERFACE
-    async function updateUI() {
-      const { data: { user } } = await supabase.auth.getUser();
+/* ================= AUTH ================= */
+async function login() {
+  const email = emailInput.value.trim();
+  if (!email) return;
+  const { error } = await supabaseClient.auth.signInWithOtp({ email });
+  loginStatus.textContent = error ? error.message : "✅ Email envoyé";
+}
 
-      if (user) {
-        loginSection.classList.add("hidden");
-        connectedSection.classList.remove("hidden");
+async function logout() {
+  await supabaseClient.auth.signOut();
+  location.reload();
+}
 
-        // ✅ ASSOCIATION AUTOMATIQUE DES DEVICES
-        const { error } = await supabase
-          .from("devices")
-          .update({
-            user_id: user.id,
-            pending_email: null,
-          })
-          .eq("pending_email", user.email);
+supabaseClient.auth.onAuthStateChange(async (_, session) => {
+  if (session?.user) {
+    currentUser = session.user;
+    loginBox.style.display = "none";
+    dashboard.style.display = "block";
+    await loadDevices();
+  }
+});
 
-        if (error) {
-          console.error(error);
-          statusMsg.textContent = "⚠️ Erreur lors de l’association";
-        } else {
-          statusMsg.textContent = "✅ Vos modules sont maintenant associés";
-        }
-      } else {
-        loginSection.classList.remove("hidden");
-        connectedSection.classList.add("hidden");
-        statusMsg.textContent = "";
+/* ================= DEVICES ================= */
+async function loadDevices() {
+  const { data } = await supabaseClient
+    .from("devices")
+    .select("id, name")
+    .eq("user_id", currentUser.id)
+    .order("created_at");
+
+  deviceSelect.innerHTML = "";
+
+  data.forEach(d => {
+    const opt = document.createElement("option");
+    opt.value = d.id;
+    opt.textContent = d.name || d.id;
+    deviceSelect.appendChild(opt);
+  });
+
+  deviceSelect.onchange = () => loadCurve(deviceSelect.value);
+  if (data.length) loadCurve(data[0].id);
+}
+
+async function renameDevice() {
+  const name = deviceNameInput.value.trim();
+  if (!name) return;
+
+  await supabaseClient
+    .from("devices")
+    .update({ name })
+    .eq("id", deviceSelect.value);
+
+  loadDevices();
+}
+
+/* ================= ACTIONS ================= */
+async function sendThreshold() {
+  const v = parseInt(thresholdInput.value);
+  if (isNaN(v)) return;
+
+  await supabaseClient
+    .from("actions")
+    .insert({
+      device_id: deviceSelect.value,
+      action: "set_threshold",
+      threshold: v,
+      processed: false
+    });
+
+  thresholdStatus.textContent = "✅ Seuil envoyé";
+}
+
+async function manualWater() {
+  await supabaseClient
+    .from("actions")
+    .insert({
+      device_id: deviceSelect.value,
+      action: "water",
+      processed: false
+    });
+
+  alert("✅ Arrosage demandé");
+}
+
+/* ================= GRAPH ================= */
+async function loadCurve(deviceId) {
+  status.textContent = "⏳ Chargement...";
+  const { data } = await supabaseClient
+    .from("mesures")
+    .select("timestamp, humidity, threshold")
+    .eq("device_id", deviceId)
+    .order("timestamp");
+
+  if (!data || !data.length) {
+    status.textContent = "Aucune donnée";
+    return;
+  }
+
+  const h = data.map(m => ({ x: new Date(m.timestamp), y: m.humidity }));
+  const t = data.map(m => ({ x: new Date(m.timestamp), y: m.threshold }));
+
+  if (chart) chart.destroy();
+
+  chart = new Chart(chartCanvas = document.getElementById("chart"), {
+    type: "line",
+    data: {
+      datasets: [
+        { label: "Humidité (%)", data: h, borderColor: "#2c7", tension: 0.2 },
+        { label: "Seuil (%)", data: t, borderColor: "red", pointRadius: 0 }
+      ]
+    },
+    options: {
+      parsing: false,
+      responsive: true,
+      scales: {
+        x: { type: "time" },
+        y: { min: 0, max: 100 }
       }
     }
+  });
 
-    // ✅ MAGIC LINK
-    loginBtn.addEventListener("click", async () => {
-      const email = emailInput.value.trim();
+  applyTimeScale();
+  status.textContent = `✅ ${data.length} points`;
+}
 
-      if (!email) {
-        alert("Veuillez entrer un email");
-        return;
-      }
-
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo: window.location.origin,
-        },
-      });
-
-      if (error) {
-        alert("❌ " + error.message);
-      } else {
-        alert("📩 Lien envoyé ! Vérifiez vos emails.");
-      }
-    });
-
-    // ✅ LOGOUT
-    logoutBtn.addEventListener("click", async () => {
-      await supabase.auth.signOut();
-      updateUI();
-    });
-
-    // ✅ AUTO À CHAQUE CHANGEMENT D’AUTH
-    supabase.auth.onAuthStateChange(() => {
-      updateUI();
-    });
-
-    // ✅ INIT
-    updateUI();
-  </script>
+/* ================= TIME ================= */
+function applyTimeScale() {
+  if (!chart) return;
+  const now = new Date();
+  const map = {
+    hour: 3600000,
+    day: 86400000,
+    week: 7 * 86400000,
+    month: 30 * 86400000
+  };
+  chart.options.scales.x.min = new Date(now - map[timeScale.value]);
+  chart.options.scales.x.max = now;
+  chart.update();
+}
+</script>
 
 </body>
 </html>
