@@ -1,292 +1,42 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8" />
-<title>Jardin en Eau</title>
-
-<style>
-  body { font-family: Arial; margin: 30px; }
-  h1 { color: #2c7; }
-  input, button, select {
-    padding: 10px;
-    font-size: 16px;
-    margin-top: 10px;
-    margin-right: 5px;
-  }
-  #loginBox {
-    border: 2px solid #ccc;
-    padding: 20px;
-    max-width: 400px;
-    border-radius: 10px;
-  }
-  #dashboard { display: none; }
-  #chartContainer {
-    width: 100%;
-    max-width: 900px;
-    margin-top: 40px;
-    display: none;
-  }
-  #status { margin-top: 20px; font-weight: bold; }
-</style>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <meta charset="UTF-8">
+  <title>Configuration du module</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-
 <body>
-
-<h1>🌱 Jardin en Eau</h1>
-
-<div id="loginBox">
-  <h2>Connexion</h2>
-  <input id="emailInput" type="email" placeholder="email@example.com" style="width:90%">
-  <br>
-  <button onclick="login()">Recevoir le lien de connexion</button>
-  <p id="loginStatus"></p>
-</div>
-
-<div id="dashboard">
-
-  <p><strong>Module :</strong></p>
-  <select id="deviceSelect"></select>
-
-  <div style="margin-top:10px;">
-    <input id="deviceNameInput" placeholder="Nom du module" style="width:220px">
-    <button onclick="renameDevice()">✏️ Renommer</button>
-  </div>
-
-  <h2>🎚️ Consigne de seuil</h2>
-  <div>
-    <input
-      id="thresholdInput"
-      type="number"
-      min="0"
-      max="100"
-      placeholder="Seuil (%)"
-      style="width:120px"
-    >
-    <button onclick="sendThreshold()">📤 Envoyer</button>
-  </div>
-  <div id="thresholdStatus"></div>
-
-  <h2>💧 Arrosage manuel</h2>
-    <button onclick="forceWatering()">🚿 Forcer l’arrosage</button>
-    <div id="waterStatus"></div>
-
-  
-  
-  <h2>⏱️ Échelle de temps</h2>
-  <select id="timeScale" onchange="applyTimeScale()">
-    <option value="hour">Dernière heure</option>
-    <option value="day" selected>Dernier jour</option>
-    <option value="week">Dernière semaine</option>
-    <option value="month">Dernier mois</option>
-  </select>
-
-  <div id="status"></div>
-
-  <div id="chartContainer">
-    <canvas id="chart"></canvas>
-  </div>
-
-  <br>
-  <button onclick="logout()">Déconnexion</button>
-</div>
+  <h2>Configurer votre module</h2>
+  <input id="email" type="email" placeholder="email@example.com">
+  <button onclick="login()">Recevoir le lien</button>
+  <p id="status"></p>
 
 <script>
-/* ================= SUPABASE ================= */
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
-const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const SUPABASE_KEY = "TA_CLE_ANON_SUPABASE";
+const DEVICE_ID = "ESP32_DEVICE_ID";
+const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-/* ================= STATE ================= */
-let currentUser = null;
-let chart = null;
-let devicesCache = [];
-
-/* ================= AUTH ================= */
 async function login() {
-  const email = emailInput.value.trim();
+  const email = document.getElementById("email").value;
   if (!email) return;
-  const { error } = await supabaseClient.auth.signInWithOtp({ email });
-  loginStatus.textContent = error ? error.message : "✅ Email envoyé";
+  await supabase.auth.signInWithOtp({
+    email,
+    options: { emailRedirectTo: window.location.href }
+  });
 }
 
-async function logout() {
-  await supabaseClient.auth.signOut();
-  location.reload();
-}
-
-  
-/* ================= SEND THRESHOLD ================= */
-async function sendThreshold() {
-  const value = Number(document.getElementById("thresholdInput").value);
-  const deviceId = document.getElementById("deviceSelect").value;
-
-  if (isNaN(value) || value < 0 || value > 100) {
-    thresholdStatus.textContent = "❌ Valeur invalide (0–100)";
-    return;
+supabase.auth.onAuthStateChange(async (event, session) => {
+  if (event === "SIGNED_IN") {
+    await supabase.from("devices").insert({
+      device_id: DEVICE_ID,
+      user_id: session.user.id,
+      name: "Mon module",
+      claimed: true
+    });
+    document.getElementById("status").innerText = "Module associé.";
   }
-
-  thresholdStatus.textContent = "⏳ Envoi de la consigne...";
-
-  const { data, error } = await supabaseClient
-  .from("actions")
-  .insert({
-    device_id: deviceId,
-    action: "set_threshold",
-    threshold: value
-  })
-  .select();
-
-console.log("Action insérée :", data);
-
-  if (error) {
-    thresholdStatus.textContent = "❌ Erreur lors de l'envoi";
-    console.error(error);
-  } else {
-    thresholdStatus.textContent = `✅ Consigne envoyée (seuil = ${value}%)`;
-  }
-}
-
-/* ================= FORCE WATERING ================= */
-async function forceWatering() {
-  const deviceId = document.getElementById("deviceSelect").value;
-  if (!deviceId) return;
-
-  waterStatus.textContent = "⏳ Envoi de la commande d’arrosage...";
-
-  const { data, error } = await supabaseClient
-    .from("actions")
-    .insert({
-      device_id: deviceId,
-      action: "water",
-      user_id: currentUser.id
-    })
-    .select();
-
-  if (error) {
-    waterStatus.textContent = "❌ Erreur lors de l’envoi";
-    console.error(error);
-  } else {
-    waterStatus.textContent = "✅ Commande d’arrosage envoyée";
-    console.log("Action water créée :", data);
-  }
-}
-
-  
-/* ================= INIT AUTH ================= */
-async function initAuth() {
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  if (session?.user) {
-    currentUser = session.user;
-    loginBox.style.display = "none";
-    dashboard.style.display = "block";
-    await loadDevices(currentUser.id);
-  }
-}
-supabaseClient.auth.onAuthStateChange((event) => {
-  if (event === "SIGNED_OUT") location.reload();
 });
-
-/* ================= LOAD DEVICES ================= */
-async function loadDevices(userId) {
-  deviceSelect.innerHTML = "";
-  const { data } = await supabaseClient
-    .from("devices")
-    .select("device_id, name")
-    .eq("user_id", userId)
-    .order("created_at");
-
-  devicesCache = data || [];
-  devicesCache.forEach(d => {
-    const opt = document.createElement("option");
-    opt.value = d.device_id;
-    opt.textContent = d.name || d.device_id;
-    deviceSelect.appendChild(opt);
-  });
-
-  deviceSelect.onchange = () => loadCurve(deviceSelect.value);
-  if (devicesCache.length) loadCurve(devicesCache[0].device_id);
-}
-
-/* ================= LOAD CURVE ================= */
-async function loadCurve(deviceId) {
-  status.textContent = "⏳ Chargement...";
-  chartContainer.style.display = "block";
-
-  const PAGE_SIZE = 1000;
-  const MAX_POINTS = 10000;
-
-  let mesures = [];
-  let from = 0;
-
-  while (mesures.length < MAX_POINTS) {
-    const { data, error } = await supabaseClient
-      .from("mesures")
-      .select("timestamp, humidity, threshold")
-      .eq("device_id", deviceId)
-      .order("timestamp")
-      .range(from, from + PAGE_SIZE - 1);
-
-    if (error || !data || data.length === 0) break;
-
-    mesures = mesures.concat(data);
-
-    if (data.length < PAGE_SIZE) break;
-    from += PAGE_SIZE;
-  }
-
-  if (mesures.length === 0) {
-    status.textContent = "⚠️ Aucune donnée";
-    chartContainer.style.display = "none";
-    return;
-  }
-
-  const h = mesures.map(m => ({ x: new Date(m.timestamp), y: m.humidity }));
-  const t = mesures.map(m => ({ x: new Date(m.timestamp), y: m.threshold }));
-
-  if (chart) chart.destroy();
-
-  chart = new Chart(document.getElementById("chart"), {
-    type: "line",
-    data: {
-      datasets: [
-        { label: "Humidité (%)", data: h, borderColor: "#2c7", tension: 0.2 },
-        { label: "Seuil (%)", data: t, borderColor: "red", pointRadius: 0 }
-      ]
-    },
-    options: {
-      parsing: false,
-      responsive: true,
-      scales: {
-        x: { type: "time" },
-        y: { min: 0, max: 100 }
-      }
-    }
-  });
-
-  applyTimeScale();
-  status.textContent = `✅ ${mesures.length} points chargés`;
-}
-/* ================= TIME SCALE ================= */
-function applyTimeScale() {
-  if (!chart) return;
-  const now = new Date();
-  let start = new Date(now - 86400000);
-  if (timeScale.value === "hour") start = new Date(now - 3600000);
-  if (timeScale.value === "week") start = new Date(now - 7*86400000);
-  if (timeScale.value === "month") start = new Date(now - 30*86400000);
-
-  chart.options.scales.x.min = start;
-  chart.options.scales.x.max = now;
-  loadCurve(deviceId);
-}
-
-/* ================= START ================= */
-initAuth();
 </script>
-
 </body>
 </html>
