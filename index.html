@@ -116,10 +116,10 @@ supabaseClient.auth.onAuthStateChange(async (_, session) => {
 /* ================= DEVICES ================= */
 async function loadDevices() {
   deviceSelect.innerHTML = "";
+  status.textContent = "";
 
   const userEmail = currentUser.email;
-  console.log(currentUser.email);
-  
+
   const { data, error } = await supabaseClient
     .from("devices")
     .select("id, name, user_id")
@@ -136,7 +136,13 @@ async function loadDevices() {
     return;
   }
 
+  // ✅ Alternative défensive contre les doublons
+  const seen = new Set();
+
   data.forEach(d => {
+    if (seen.has(d.id)) return;
+    seen.add(d.id);
+
     const opt = document.createElement("option");
     opt.value = d.id;
     opt.textContent = d.name || d.id;
@@ -144,7 +150,7 @@ async function loadDevices() {
   });
 
   deviceSelect.onchange = () => loadCurve(deviceSelect.value);
-  loadCurve(data[0].id);
+  loadCurve(deviceSelect.value);
 }
   
 async function renameDevice() {
