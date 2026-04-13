@@ -88,26 +88,18 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY,  {auth: {detectSessionInUrl: true, persistSession: true, autoRefreshToken: true}});
 
 /* ✅ FINALISATION MAGIC LINK (OBLIGATOIRE) */
-(async () => {
-  const url = window.location.href;
 
-  if (url.includes("code=") || url.includes("access_token")) {
-    const { data, error } =
-      await supabaseClient.auth.exchangeCodeForSession(url);
-
-    if (error) {
-      console.error("❌ Erreur Auth :", error.message);
-    } else {
-      console.log("✅ Session créée :", data.session);
+const supabaseClient = supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY,
+  {
+    auth: {
+      detectSessionInUrl: true,
+      persistSession: true,
+      autoRefreshToken: true
     }
-
-    // Nettoyer l’URL après authentification
-    window.history.replaceState({}, document.title, "/water/");
   }
-})();
-
-
-
+);
 
   
 /* ================= STATE ================= */
@@ -127,7 +119,11 @@ async function logout() {
   location.reload();
 }
 
-supabaseClient.auth.onAuthStateChange(async (_, session) => {
+
+/* ✅ CET ÉVÉNEMENT DOIT SE PRODUIRE */
+supabaseClient.auth.onAuthStateChange(async (event, session) => {
+  console.log("Auth event:", event, session);
+
   if (session?.user) {
     currentUser = session.user;
     loginBox.style.display = "none";
@@ -136,17 +132,17 @@ supabaseClient.auth.onAuthStateChange(async (_, session) => {
   }
 });
 
+
 /* ================= DEVICES ================= */
+
 async function loadDevices() {
   deviceSelect.innerHTML = "";
   status.textContent = "";
 
-  const userEmail = currentUser.email;
-
   const { data, error } = await supabaseClient
     .from("devices")
-    .select("id, name, user_id")
-    .eq("pending_email", userEmail)
+    .select("id, name")
+    .eq("pending_email", currentUser.email)
     .order("created_at");
 
   if (error) {
@@ -154,12 +150,11 @@ async function loadDevices() {
     return;
   }
 
-  if (!data || data.length === 0) {
-    status.textContent = "❌ Aucun module en attente pour cet email";
+  if (!data?.length) {
+    status.textContent = "❌ Aucun module en attente";
     return;
   }
 
-  // ✅ Alternative défensive contre les doublons
   const seen = new Set();
 
   data.forEach(d => {
@@ -175,6 +170,7 @@ async function loadDevices() {
   deviceSelect.onchange = () => loadCurve(deviceSelect.value);
   loadCurve(deviceSelect.value);
 }
+
   
 async function renameDevice() {
   const name = deviceNameInput.value.trim();
