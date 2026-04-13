@@ -87,6 +87,30 @@ const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+
+/* ✅ FINALISATION MAGIC LINK (OBLIGATOIRE) */
+(async () => {
+  const url = window.location.href;
+
+  if (url.includes("code=") || url.includes("access_token")) {
+    const { data, error } =
+      await supabaseClient.auth.exchangeCodeForSession(url);
+
+    if (error) {
+      console.error("❌ Erreur Auth :", error.message);
+    } else {
+      console.log("✅ Session créée :", data.session);
+    }
+
+    // Nettoyer l’URL après authentification
+    window.history.replaceState({}, document.title, "/water/");
+  }
+})();
+
+
+
+
+  
 /* ================= STATE ================= */
 let currentUser = null;
 let chart = null;
