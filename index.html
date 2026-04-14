@@ -84,10 +84,7 @@
 <script>
 /* ================= SUPABASE ================= */
 const SUPABASE_URL = "https://pbciwmsuhaniokugzqhr.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBiY2l3bXN1aGFuaW9rdWd6cWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjAwNjYsImV4cCI6MjA5MDE5NjA2Nn0.Fl1-yezxVeatTaIJlUvAKG1X9PhIlworqZ-6vxDyAmo";
-const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY,  {auth: {detectSessionInUrl: true, persistSession: true, autoRefreshToken: true}});
-
-/* ✅ FINALISATION MAGIC LINK (OBLIGATOIRE) */
+const SUPABASE_ANON_KEY = "REDACTED_ANON_KEY";
 
 const supabaseClient = supabase.createClient(
   SUPABASE_URL,
@@ -100,26 +97,22 @@ const supabaseClient = supabase.createClient(
     }
   }
 );
-console.log("🔍 Page loaded:", window.location.href);
+
+/* ================= DEBUG AU CHARGEMENT ================= */
+console.log("🔍 PAGE LOAD URL :", window.location.href);
+console.log("🍪 COOKIES :", document.cookie);
 
 (async () => {
   const { data, error } = await supabaseClient.auth.getSession();
-  console.log("🧠 getSession() au chargement:", data.session, error);
+  console.log("🧠 getSession() AU LOAD :", data.session);
+  console.log("❗ getSession error :", error);
 })();
-  (async () => {
-  const { data: { session } } = await supabaseClient.auth.getSession();
 
-  if (session?.user) {
-    console.log("✅ Session déjà active au chargement");
-    currentUser = session.user;
-    loginBox.style.display = "none";
-    dashboard.style.display = "block";
-    await loadDevices();
-  } else {
-    console.log("ℹ️ Aucune session au chargement");
-  }
+(async () => {
+  const { data } = await supabaseClient.auth.getUser();
+  console.log("👤 getUser() AU LOAD :", data.user);
 })();
-  
+
 /* ================= STATE ================= */
 let currentUser = null;
 let chart = null;
@@ -127,8 +120,7 @@ let chart = null;
 /* ================= AUTH ================= */
 async function login() {
   const email = emailInput.value.trim();
-  console.log("📨 Demande magic link pour:", email);
-
+  console.log("📨 LOGIN CLICK → email =", email);
   if (!email) return;
 
   const { error } = await supabaseClient.auth.signInWithOtp({ email });
@@ -136,16 +128,18 @@ async function login() {
 }
 
 async function logout() {
+  console.log("🚪 LOGOUT");
   await supabaseClient.auth.signOut();
   location.reload();
 }
 
-
-/* ✅ CET ÉVÉNEMENT DOIT SE PRODUIRE */
+/* ================= AUTH EVENTS ================= */
 supabaseClient.auth.onAuthStateChange(async (event, session) => {
-  console.log("🔔 onAuthStateChange:", event, session);
+  console.log("🔔 onAuthStateChange EVENT :", event);
+  console.log("🔔 SESSION :", session);
 
   if (session?.user) {
+    console.log("✅ SESSION ACTIVE — affichage dashboard");
     currentUser = session.user;
     loginBox.style.display = "none";
     dashboard.style.display = "block";
@@ -154,8 +148,9 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
 });
 
 /* ================= DEVICES ================= */
-
 async function loadDevices() {
+  console.log("📦 loadDevices() appelé pour :", currentUser.email);
+
   deviceSelect.innerHTML = "";
   status.textContent = "";
 
@@ -165,18 +160,19 @@ async function loadDevices() {
     .eq("pending_email", currentUser.email)
     .order("created_at");
 
+  console.log("📦 devices SELECT result :", data, error);
+
   if (error) {
     status.textContent = error.message;
     return;
   }
 
   if (!data?.length) {
-    status.textContent = "❌ Aucun module en attente";
+    status.textContent = "❌ Aucun module";
     return;
   }
 
   const seen = new Set();
-
   data.forEach(d => {
     if (seen.has(d.id)) return;
     seen.add(d.id);
@@ -191,58 +187,43 @@ async function loadDevices() {
   loadCurve(deviceSelect.value);
 }
 
-  
-async function renameDevice() {
-  const name = deviceNameInput.value.trim();
-  if (!name) return;
-
-  await supabaseClient
-    .from("devices")
-    .update({ name })
-    .eq("id", deviceSelect.value);
-
-  loadDevices();
-}
-
 /* ================= ACTIONS ================= */
 async function sendThreshold() {
   const v = parseInt(thresholdInput.value);
+  console.log("🎚️ sendThreshold =", v);
   if (isNaN(v)) return;
 
-  await supabaseClient
-    .from("actions")
-    .insert({
-      device_id: deviceSelect.value,
-      action: "set_threshold",
-      threshold: v,
-      processed: false
-    });
-
-  thresholdStatus.textContent = "✅ Seuil envoyé";
+  await supabaseClient.from("actions").insert({
+    device_id: deviceSelect.value,
+    action: "set_threshold",
+    threshold: v,
+    processed: false
+  });
 }
 
 async function manualWater() {
-  await supabaseClient
-    .from("actions")
-    .insert({
-      device_id: deviceSelect.value,
-      action: "water",
-      processed: false
-    });
-
-  alert("✅ Arrosage demandé");
+  console.log("💧 manualWater");
+  await supabaseClient.from("actions").insert({
+    device_id: deviceSelect.value,
+    action: "water",
+    processed: false
+  });
 }
 
 /* ================= GRAPH ================= */
 async function loadCurve(deviceId) {
+  console.log("📈 loadCurve(", deviceId, ")");
   status.textContent = "⏳ Chargement...";
+
   const { data } = await supabaseClient
     .from("mesures")
     .select("timestamp, humidity, threshold")
     .eq("device_id", deviceId)
     .order("timestamp");
 
-  if (!data || !data.length) {
+  console.log("📈 mesures DATA :", data);
+
+  if (!data?.length) {
     status.textContent = "Aucune donnée";
     return;
   }
@@ -252,17 +233,16 @@ async function loadCurve(deviceId) {
 
   if (chart) chart.destroy();
 
-  chart = new Chart(chartCanvas = document.getElementById("chart"), {
+  chart = new Chart(document.getElementById("chart"), {
     type: "line",
     data: {
       datasets: [
-        { label: "Humidité (%)", data: h, borderColor: "#2c7", tension: 0.2 },
+        { label: "Humidité (%)", data: h, borderColor: "#2c7" },
         { label: "Seuil (%)", data: t, borderColor: "red", pointRadius: 0 }
       ]
     },
     options: {
       parsing: false,
-      responsive: true,
       scales: {
         x: { type: "time" },
         y: { min: 0, max: 100 }
@@ -270,23 +250,7 @@ async function loadCurve(deviceId) {
     }
   });
 
-  applyTimeScale();
   status.textContent = `✅ ${data.length} points`;
-}
-
-/* ================= TIME ================= */
-function applyTimeScale() {
-  if (!chart) return;
-  const now = new Date();
-  const map = {
-    hour: 3600000,
-    day: 86400000,
-    week: 7 * 86400000,
-    month: 30 * 86400000
-  };
-  chart.options.scales.x.min = new Date(now - map[timeScale.value]);
-  chart.options.scales.x.max = now;
-  chart.update();
 }
 </script>
 
