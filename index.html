@@ -101,6 +101,19 @@ const supabaseClient = supabase.createClient(
   }
 );
 
+  (async () => {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+
+  if (session?.user) {
+    console.log("✅ Session déjà active au chargement");
+    currentUser = session.user;
+    loginBox.style.display = "none";
+    dashboard.style.display = "block";
+    await loadDevices();
+  } else {
+    console.log("ℹ️ Aucune session au chargement");
+  }
+})();
   
 /* ================= STATE ================= */
 let currentUser = null;
